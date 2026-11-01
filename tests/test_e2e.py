@@ -117,6 +117,9 @@ assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg
 dyn = s3["dyn"]
 print("  exclusions proposées :", dyn)
 st, vs = run("S3", [dyn]); val("S3")
+if os.environ.get("MOCK_CADRE_GEANT"):
+    assert any("cadrage maximal démesuré" in l for l in vs[0]["info"]), vs[0]["info"][:6]
+    print("  ", next(l for l in vs[0]["info"] if "démesuré" in l)[:170])
 if os.environ.get("MOCK_FRAMING"):
     assert any("recalé sur le principal" in l for l in vs[0]["info"]), vs[0]["info"]
     print("  ", next(l for l in vs[0]["info"] if "recalé" in l)[:160])

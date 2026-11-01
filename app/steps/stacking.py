@@ -430,15 +430,39 @@ class Empilement(Step):
             filt += f" -filter-fwhm={prm['filter_fwhm']}k"
         if excl:
             filt += " -filter-included"
+        base_cmds = list(cmds)
         cmds.append(f"seqapplyreg combined_ {filt} -framing=max -drizzle -scale=1.0 -pixfrac=1.0 -kernel=square")
         ctx.sir(cmds, cwd=p.root, name=f"seqapplyreg{('_' + dev) if dev else ''}")
         rfiles = sorted(f for f in proc.glob("r_combined_*") if f.suffix.lower() in (".fit", ".fits"))
+        cadre_info = []
+        if rfiles:
+            # -framing=max agrandit le cadre jusqu'à contenir TOUTES les poses : quelques poses très décalées ou mal
+            # alignées (autre nuit, autre pointage) le font exploser, et le stack devient vide aux trois quarts
+            # (GraXpert et la combinaison des appareils échouent dessus). Cadre démesuré -> cadrage centré.
+            h0 = fits.getheader(str(rfiles[0]))
+            cw, ch = int(h0.get("NAXIS1") or 0), int(h0.get("NAXIS2") or 0)
+            sizes = [s.get("size") for s in p.state.get("sessions", []) if s.get("size")
+                     and (not dev or s.get("device") == dev)]
+            if sizes and cw and ch:
+                fw, fh = max(sizes, key=lambda z: z[0] * z[1])
+                ratio = cw * ch / max(fw * fh, 1)
+                if ratio > 2.5:
+                    for f in proc.glob("r_combined_*"):
+                        f.unlink()
+                    ctx.sir(base_cmds + [f"seqapplyreg combined_ {filt} -framing=cog -drizzle -scale=1.0 -pixfrac=1.0 -kernel=square"],
+                            cwd=p.root, name=f"seqapplyreg_cog{('_' + dev) if dev else ''}")
+                    rfiles = sorted(f for f in proc.glob("r_combined_*") if f.suffix.lower() in (".fit", ".fits"))
+                    h1 = fits.getheader(str(rfiles[0])) if rfiles else {}
+                    cadre_info.append(f"ATTENTION : cadrage maximal démesuré ({cw}x{ch} px pour des poses de {fw}x{fh}, "
+                                      f"{ratio:.1f} fois leur surface : quelques poses très décalées ou mal alignées) : "
+                                      f"alignement refait avec un cadrage centré, {h1.get('NAXIS1')}x{h1.get('NAXIS2')} px. "
+                                      "Les zones vues par trop peu de poses sont laissées de côté.")
         n = len(rfiles)
         if n < 2:
             raise RuntimeError(f"seqapplyreg n'a gardé que {n} pose(s) sur {total}{' pour le ' + dev if dev else ''} : "
                                "l'empilement est impossible. Causes probables : alignement raté à l'étape S2 pour cet "
                                "appareil (trop peu d'étoiles), ou filtre de rondeur trop strict (essaie 3 ou 3.5).")
-        info = [f"Poses alignées et retenues : {n} sur {total}" + (f" ({len(excl)} écartées à la main)" if excl else "")]
+        info = cadre_info + [f"Poses alignées et retenues : {n} sur {total}" + (f" ({len(excl)} écartées à la main)" if excl else "")]
         stack_cmd = "rej 3 3 -norm=addscale -output_norm -rgb_equal -maximize -feather=5 -weight=noise"
         outputs, extra = {}, {}
         filters = [inventory.norm_filter(fits.getheader(str(f)).get("FILTER"), "") for f in rfiles] if p.mode == "B" else []

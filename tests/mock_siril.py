@@ -167,6 +167,10 @@ def cmd(line):
             rgb = np.stack([ndi.zoom(x, 2, order=1) for x in rgb])
             rgb[:, :12, :] = 0
             rgb[:, :, -10:] = 0
+            if os.environ.get("MOCK_CADRE_GEANT") and opts.get("-framing") == "max":
+                big = np.zeros((3, rgb.shape[1] * 2, rgb.shape[2] * 2), np.float32)   # quelques poses très décalées
+                big[:, rgb.shape[1] // 2:rgb.shape[1] // 2 + rgb.shape[1], rgb.shape[2] // 2:rgb.shape[2] // 2 + rgb.shape[2]] = rgb
+                rgb = big
             k += 1
             wr(P(f"r_combined_{k:05d}.fit"), rgb, hd)
             newI.append(f"I {k} 1")
