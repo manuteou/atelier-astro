@@ -126,6 +126,10 @@ if os.environ.get("MOCK_CRASH_WEIGHT"):
 if MULTI:
     st, vs = run("S3B", [{"mode": "combinaison", "poids": 1.0}, {"mode": "combinaison", "poids": 0.5},
                          {"mode": "principal"}, {"mode": "secondaire"}])
+    if os.environ.get("MOCK_TROUS"):
+        assert not any("sans extraction de fond" in l for v in vs for l in v["info"]), "GraXpert doit passer sur un stack troué"
+        assert any("contient des données" in l for l in vs[0]["info"]), vs[0]["info"][:3]
+        print("  stack S50 troué : vides remplis pour GraXpert, faible couverture signalée")
     if os.environ.get("MOCK_GRAXPERT_NAN"):
         assert all(any("utilisé sans extraction de fond" in l for l in v["info"]) for v in vs[:2]), vs[0]["info"][:4]
         print("  GraXpert cassé sur le S30 : stack utilisé sans extraction de fond, signalé")

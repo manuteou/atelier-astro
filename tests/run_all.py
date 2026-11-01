@@ -15,7 +15,8 @@ SUITE += [("bout en bout " + " ".join(a), ["test_e2e.py"] + a) for a in (E2E[:1]
 if "--rapide" not in sys.argv:
     SUITE += [("bout en bout B nebuleuse, Siril qui plante", ["test_e2e.py", "B", "nebuleuse"], {"MOCK_CRASH_WEIGHT": "1"}),
               ("bout en bout B galaxie, cadres différents", ["test_e2e.py", "B", "galaxie"], {"MOCK_FRAMING": "1"}),
-              ("bout en bout B nebuleuse multi, GraXpert cassé", ["test_e2e.py", "B", "nebuleuse", "multi"], {"MOCK_GRAXPERT_NAN": "1"})]
+              ("bout en bout B nebuleuse multi, GraXpert cassé", ["test_e2e.py", "B", "nebuleuse", "multi"], {"MOCK_GRAXPERT_NAN": "1"}),
+              ("bout en bout B nebuleuse multi, stack troué", ["test_e2e.py", "B", "nebuleuse", "multi"], {"MOCK_TROUS": "1"})]
 SUITE += [("interface dans le navigateur", ["test_ui.py"])]
 
 fails = []

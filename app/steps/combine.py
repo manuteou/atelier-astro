@@ -128,13 +128,37 @@ class Combinaison(Step):
         if fc < 0.05 or min(dc.shape[1:]) < 64:
             raise ValueError(f"le stack {dev} recadré de ses bords est vide ou minuscule ({dc.shape[2]}x{dc.shape[1]} px, "
                              f"{100 * fc:.1f} % exploitables) : son aperçu en S3 montre sans doute un empilement raté")
+        if fc < 0.7:
+            msg = (f"ATTENTION : {dev} : seulement {100 * fc:.0f} % de ce stack contient des données une fois ses bords "
+                   "retirés (rotation de champ d'une nuit à l'autre, cadrages différents, ou poses mal alignées). "
+                   "Regarde son aperçu en S3 : un stack très troué ou en éventail se combine moins bien.")
+            ctx.log(msg)
+            notes.append(msg)
         if prm["graxpert"] and outils.actif(ctx.cfg, "fond"):
             def mk_bge(out):
-                tool(ctx, cur, out, outils.commandes(ctx.cfg, "fond", prm["smoothing"]), f"fond_{dev}")
-                d, h = fitsio.read(out)
-                if not np.isfinite(d).all():          # pixels NaN (division par zéro dans l'outil) : mis à zéro
-                    fitsio.write(out, np.nan_to_num(d, nan=0.0, posinf=0.0, neginf=0.0), h)
-            bge = _cached(ctx, dev, "bge", cur, {"smoothing": prm["smoothing"], "outil": outils.choix(ctx.cfg, "fond")}, mk_bge)
+                d, h = fitsio.read(cur)
+                vide = ~(np.isfinite(d).all(0) & (d.max(0) > 0))
+                entree = cur
+                if vide.mean() > 0.01:
+                    # GraXpert normalise par l'écart à la médiane : sur une image vide à plus de moitié, cet écart
+                    # vaut 0 et tout devient NaN. Les vides sont remplis au niveau du ciel, puis remis à zéro.
+                    rempli = np.nan_to_num(d, nan=0.0, posinf=0.0, neginf=0.0)
+                    for c in range(rempli.shape[0]):
+                        rempli[c][vide] = float(np.median(rempli[c][~vide]))
+                    entree = Path(str(out).rsplit(".", 1)[0] + "_rempli.fit")
+                    fitsio.write(entree, rempli, h)
+                    ctx.log(f"{dev} : {100 * vide.mean():.0f} % de pixels vides remplis au niveau du ciel pour "
+                            "l'extraction de fond (remis à zéro ensuite)")
+                tool(ctx, entree, out, outils.commandes(ctx.cfg, "fond", prm["smoothing"]), f"fond_{dev}")
+                d2, h2 = fitsio.read(out)
+                d2 = np.nan_to_num(d2, nan=0.0, posinf=0.0, neginf=0.0)       # NaN (division par zéro) : à zéro
+                if vide.any() and d2.shape == d.shape:
+                    d2[:, vide] = 0
+                fitsio.write(out, d2, h2)
+                if entree != cur:
+                    Path(entree).unlink(missing_ok=True)
+            bge = _cached(ctx, dev, "bge", cur, {"smoothing": prm["smoothing"], "outil": outils.choix(ctx.cfg, "fond"),
+                                                 "vides": "remplis"}, mk_bge)
             db, _ = fitsio.read(bge)
             fb = _valid(db)
             if fb < 0.5 * fc:

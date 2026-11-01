@@ -211,6 +211,10 @@ def cmd(line):
             st = st[:, cut:, :]
         if "-norm=mul" in args:
             st = st / max(float(np.median(st)), 1e-6) * 0.5
+        if os.environ.get("MOCK_TROUS") and "S50" in opts.get("-out", ""):
+            H_, W_ = st.shape[1:]                       # stack en éventail (rotation de champ) : un coin sans données
+            yy, xx = np.mgrid[0:H_, 0:W_]
+            st = st * ((xx / W_ + yy / H_) < 0.85)[None]
         hd0["STACKCNT"] = len(files)
         hd0["LIVETIME"] = live
         out = opts["-out"]
@@ -238,6 +242,9 @@ def cmd(line):
             bg = np.stack([ndi.gaussian_filter(ndi.median_filter(x[::4, ::4], 9), 6) for x in d])
             bg = np.stack([ndi.zoom(b, (x.shape[0] / b.shape[0], x.shape[1] / b.shape[1]), order=1) for b, x in zip(bg, d)])
             cur[0] = np.clip(d - bg + np.median(bg), 0, 1) * (d > 0)
+            if (d.max(0) <= 0).mean() > 0.5:           # comme le vrai : écart à la médiane nul, division par zéro
+                print("GraXpert-AI.py:2847: RuntimeWarning: divide by zero encountered in divide", flush=True)
+                cur[0] = np.full_like(d, np.nan)
             if os.environ.get("MOCK_GRAXPERT_NAN") and "fond_S30" in " ".join(sys.argv):
                 cur[0] = np.full_like(d, np.nan)       # GraXpert qui divise par zéro : image NaN (vu sur un vrai stack)
         elif "BlurX" in name:
