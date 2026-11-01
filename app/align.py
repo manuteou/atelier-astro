@@ -20,11 +20,29 @@ def luminance(data):
     return data[:3].mean(0) if data.shape[0] >= 3 else data[0]
 
 
+def _fond_local(L, k=4, taille=9):
+    """Fond à grande échelle (médiane glissante sur une image réduite k fois, puis agrandie) : garde la nébuleuse et
+    le gradient, pas les étoiles."""
+    small = L[::k, ::k]
+    m = ndi.median_filter(small, taille)
+    up = ndi.zoom(m, (L.shape[0] / m.shape[0], L.shape[1] / m.shape[1]), order=1)
+    out = np.empty_like(L)
+    h, w = min(up.shape[0], L.shape[0]), min(up.shape[1], L.shape[1])
+    out[:h, :w] = up[:h, :w]
+    out[h:, :] = out[h - 1:h, :] if h < L.shape[0] else out[h:, :]
+    out[:, w:] = out[:, w - 1:w] if w < L.shape[1] else out[:, w:]
+    return out
+
+
 def detect(L, n=200, border=10):
     valid = ndi.binary_erosion(L > 0, iterations=border)
     v = L[valid]
     if v.size < 1000:
         return np.zeros((0, 2)), np.zeros(0)
+    # fond local (nébuleuse, galaxie, gradient du ciel) retiré avant la recherche des pics : sans cela, sur un stack
+    # dont le fond n'est pas aplani, le seuil est faussé et les étoiles des zones sombres ou claires sont perdues
+    L = L - _fond_local(np.where(valid, L, float(np.median(v))))
+    v = L[valid]
     bg = float(np.median(v))
     sig = 1.4826 * float(np.median(np.abs(v - bg))) or 1e-6
     Ls = ndi.gaussian_filter(L, 1.5)
@@ -187,7 +205,10 @@ def warp(src_data, M, shape):
 def noise(data):
     """Bruit de fond par pixel (0-1) : MAD du résidu haute fréquence sur les pixels de ciel."""
     L = luminance(data)
-    v = L > 0
+    v = np.isfinite(L) & (L > 0)
+    if v.sum() < 100:
+        raise ValueError("image vide ou invalide (aucun pixel exploitable) : bruit de fond impossible à mesurer")
+    L = np.where(v, L, 0)
     hp = L - ndi.median_filter(L, 5)
     sky = v & (L <= np.percentile(L[v], 60))
     r = hp[sky]

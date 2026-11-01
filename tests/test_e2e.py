@@ -126,6 +126,9 @@ if os.environ.get("MOCK_CRASH_WEIGHT"):
 if MULTI:
     st, vs = run("S3B", [{"mode": "combinaison", "poids": 1.0}, {"mode": "combinaison", "poids": 0.5},
                          {"mode": "principal"}, {"mode": "secondaire"}])
+    if os.environ.get("MOCK_GRAXPERT_NAN"):
+        assert all(any("utilisé sans extraction de fond" in l for l in v["info"]) for v in vs[:2]), vs[0]["info"][:4]
+        print("  GraXpert cassé sur le S30 : stack utilisé sans extraction de fond, signalé")
     if MODE == "B":
         from astropy.io import fits as _f
         main_f = "LP" if TTYPE == "nebuleuse" else "IRCUT"
@@ -153,7 +156,7 @@ rect2 = [rect[0], rect[1] + 10, rect[2], rect[3] - 30]   # rectangle asymétriqu
 st, vs = run("P0", [{"rect": rect2}]); val("P0")
 assert config.load()["crop_y_origin"] == "bas", "la convention inversée du faux Siril aurait dû être détectée"
 ok(c.post(f"/api/projects/{NAME}/zoom", json={"rect": [100, 80, 160, 120], "step": "P0"}))
-if MULTI:
+if MULTI and not os.environ.get("MOCK_GRAXPERT_NAN"):
     proj = ok(c.get(f"/api/projects/{NAME}"))
     assert not next(s for s in proj["steps"] if s["id"] == "P1")["applies"], "P1 doit être sans objet après GraXpert par stack"
 else:

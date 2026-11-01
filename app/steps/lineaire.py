@@ -177,7 +177,7 @@ class GraXpert(Step):
             return ok, why
         st = p.state["steps"].get("S3B", {})
         m = p.state["facts"].get("multi") or {}
-        if st.get("status") in ("done", "stale") and m.get("graxpert"):
+        if st.get("status") in ("done", "stale") and m.get("graxpert") and not m.get("fond_rate"):
             return False, "fond déjà extrait de chaque stack avant la combinaison des appareils"
         return True, ""
 

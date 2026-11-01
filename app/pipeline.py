@@ -1,5 +1,6 @@
 """Orchestration : lancer les variantes d'une étape, valider, passer, NOTES.md, presets."""
 import json
+from pathlib import Path
 import time
 
 from . import config
@@ -65,6 +66,9 @@ def run_variants(job, p: Project, sid, variants):
                 raise J.Cancelled("traitement annulé")
             var["error"] = str(e)
             job.write(f"Variante {tag} en échec : {e}")
+            import traceback
+            where = [f"{Path(fr.filename).name}:{fr.lineno} ({fr.name})" for fr in traceback.extract_tb(e.__traceback__)[-4:]]
+            job.write("  (où : " + " ← ".join(reversed(where)) + ")")
         var["duree"] = round(time.time() - t0, 1)
         results.append(var)
     st = p.step(sid)

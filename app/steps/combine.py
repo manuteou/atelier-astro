@@ -55,6 +55,12 @@ def _cached(ctx, dev, kind, src, params, make):
 FK = {"LP": "lp", "IRCUT": "ir"}
 
 
+def _valid(data):
+    """Part des pixels exploitables (finis et non nuls) d'une image."""
+    L = np.asarray(data, np.float32).mean(0)
+    return float((np.isfinite(L) & (L > 0)).mean())
+
+
 def _pix_scale(p, dev, hdr):
     """Secondes d'arc par pixel d'un stack : en-tête (FOCALLEN, XPIXSZ), sinon fiche Matériel."""
     from .. import materiel
@@ -100,23 +106,57 @@ class Combinaison(Step):
         return ok, "valider d'abord l'empilement par appareil (S3)"
 
     def _prepare(self, ctx, dev, prm, src=None):
+        """Stack recadré de ses bords puis passé dans l'outil de fond. Chaque image est contrôlée : un stack vide
+        arrête avec son nom ; une sortie d'outil vide ou cassée (NaN) est écartée, avec le stack sans extraction."""
         src = src or ctx.p.file(f"stack_{dev}")
+        notes = getattr(self, "_notes", None)
+        notes = notes if notes is not None else []
+        d0, _ = fitsio.read(src)
+        frac0 = _valid(d0)
+        if frac0 < 0.05:
+            raise ValueError(f"le stack {dev} ({Path(src).name}) est vide ou invalide ({100 * frac0:.1f} % de pixels "
+                             "exploitables) : refais l'empilement S3 et regarde son aperçu")
 
         def mk_crop(out):
             d, h = fitsio.read(src)
             c, hd, rect = _crop_borders(d, h)
-            fitsio.write(out, c, hd)
+            fitsio.write(out, np.nan_to_num(c, nan=0.0, posinf=0.0, neginf=0.0), hd)
             ctx.log(f"{dev} : bords retirés, rectangle {rect}")
         cur = _cached(ctx, dev, "crop", src, {"bords": 2}, mk_crop)
+        dc, _ = fitsio.read(cur)
+        fc = _valid(dc)
+        if fc < 0.05 or min(dc.shape[1:]) < 64:
+            raise ValueError(f"le stack {dev} recadré de ses bords est vide ou minuscule ({dc.shape[2]}x{dc.shape[1]} px, "
+                             f"{100 * fc:.1f} % exploitables) : son aperçu en S3 montre sans doute un empilement raté")
         if prm["graxpert"] and outils.actif(ctx.cfg, "fond"):
             def mk_bge(out):
                 tool(ctx, cur, out, outils.commandes(ctx.cfg, "fond", prm["smoothing"]), f"fond_{dev}")
-            cur = _cached(ctx, dev, "bge", cur, {"smoothing": prm["smoothing"], "outil": outils.choix(ctx.cfg, "fond")}, mk_bge)
+                d, h = fitsio.read(out)
+                if not np.isfinite(d).all():          # pixels NaN (division par zéro dans l'outil) : mis à zéro
+                    fitsio.write(out, np.nan_to_num(d, nan=0.0, posinf=0.0, neginf=0.0), h)
+            bge = _cached(ctx, dev, "bge", cur, {"smoothing": prm["smoothing"], "outil": outils.choix(ctx.cfg, "fond")}, mk_bge)
+            db, _ = fitsio.read(bge)
+            fb = _valid(db)
+            if fb < 0.5 * fc:
+                msg = (f"ATTENTION : {dev} : l'extraction de fond ({outils.nom(ctx.cfg, 'fond')}) a rendu une image vide "
+                       f"ou cassée ({100 * fb:.0f} % de pixels exploitables contre {100 * fc:.0f} % avant) : ce stack est "
+                       "utilisé sans extraction de fond, et l'étape P1 (fond) sera proposée sur le résultat combiné.")
+                ctx.log(msg)
+                notes.append(msg)
+                self._fond_rate = getattr(self, "_fond_rate", []) + [dev]
+            else:
+                cur = bge
         return cur
 
     def run(self, ctx, prm, tag):
-        if ctx.p.mode == "B":
-            return self.run_b(ctx, prm, tag)
+        self._notes, self._fond_rate = [], []
+        res = self.run_b(ctx, prm, tag) if ctx.p.mode == "B" else self.run_a(ctx, prm, tag)
+        res["info"] = self._notes + res["info"]
+        if self._fond_rate:                   # P1 (fond) ne doit plus être sautée : un stack n'a pas eu son extraction
+            res["extra"]["multi"]["fond_rate"] = sorted(set(self._fond_rate))
+        return res
+
+    def run_a(self, ctx, prm, tag):
         p = ctx.p
         devs = devices(p)
         pr = devs[0]

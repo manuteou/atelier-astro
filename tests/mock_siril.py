@@ -238,6 +238,8 @@ def cmd(line):
             bg = np.stack([ndi.gaussian_filter(ndi.median_filter(x[::4, ::4], 9), 6) for x in d])
             bg = np.stack([ndi.zoom(b, (x.shape[0] / b.shape[0], x.shape[1] / b.shape[1]), order=1) for b, x in zip(bg, d)])
             cur[0] = np.clip(d - bg + np.median(bg), 0, 1) * (d > 0)
+            if os.environ.get("MOCK_GRAXPERT_NAN") and "fond_S30" in " ".join(sys.argv):
+                cur[0] = np.full_like(d, np.nan)       # GraXpert qui divise par zéro : image NaN (vu sur un vrai stack)
         elif "BlurX" in name:
             cur[0] = np.clip(d + 0.3 * (d - ndi.gaussian_filter(d, (0, 1, 1))), 0, 1)
         elif "NoiseX" in name:
