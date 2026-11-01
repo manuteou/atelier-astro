@@ -37,7 +37,7 @@ class Inventaire(Step):
     params = [
         P("mode", "Filtres", "choice", "A", choices=[["A", "A. Tout ensemble"], ["B", "B. Deux stacks séparés"],
                                                     ["C", "C. Un seul filtre"]], show_if={"_deux_filtres": [True]},
-          help="B n'est pas encore possible quand le projet a plusieurs appareils"),
+          help="avec plusieurs appareils, B fait un stack par filtre et par appareil, puis les combine filtre par filtre"),
         P("filtre_c", "Filtre gardé (mode C)", "choice", "IRCUT", choices=[["LP", "Bi-bande (LP)"], ["IRCUT", "Large bande (IRCUT)"]],
           show_if={"mode": ["C"], "_deux_filtres": [True]}),
         P("principal", "Appareil principal (plusieurs appareils)", "choice", "", choices=[], show_if={"_multi": [True]},
@@ -60,7 +60,8 @@ class Inventaire(Step):
             lines.append(f"Un seul type de filtre dans ce projet ({', '.join(noms)}) : "
                          "le choix A / B / C ne se pose pas.")
         elif len({s.get("device") for s in ses}) > 1:
-            lines.append("Bi-bande et large bande présents, mais plusieurs appareils : A ou C possibles, B pas encore.")
+            lines.append("Plusieurs appareils : en mode B, chaque appareil empile chacun de ses filtres à part, puis "
+                         "l'étape « Combinaison des appareils » réunit les stacks filtre par filtre.")
         return lines
 
     def _devs(self, p):
@@ -126,9 +127,6 @@ class Inventaire(Step):
         kept = [s for s in ses if not (both and prm["mode"] == "C" and s.get("filter") != prm["filtre_c"])]
         devices = {s.get("device") or "?" for s in kept}
         if len(devices) > 1:
-            if prm["mode"] == "B" and both:
-                raise ValueError("le mode B (deux stacks LP / IRCUT) n'est pas encore combiné avec plusieurs appareils : "
-                                 "choisis A ou C, ou fais un projet par appareil")
             from .. import materiel
             _, nouveaux = materiel.seen(p)
             if nouveaux:
@@ -141,8 +139,10 @@ class Inventaire(Step):
                 if a and b:
                     gain.append(f"{model(p, d)} : ~{100 * (float(a) / float(b)) ** 2:.0f} % de la lumière du principal "
                                 "par zone du ciel")
-            info.append(f"Plusieurs appareils ({' + '.join(model(p, d) for d in sorted(devices))}) : un stack par appareil, "
-                        f"puis étape « Combinaison des appareils » (alignement sur {model(p, pr)}, échelle comprise)."
+            par = "un stack par filtre et par appareil" if prm["mode"] == "B" and both else "un stack par appareil"
+            info.append(f"Plusieurs appareils ({' + '.join(model(p, d) for d in sorted(devices))}) : {par}, "
+                        f"puis étape « Combinaison des appareils » (alignement sur {model(p, pr)}, échelle comprise"
+                        + (", filtre par filtre" if prm["mode"] == "B" and both else "") + ")."
                         + (" Gain attendu : " + " ; ".join(gain) + "." if gain else "")
                         + " Un instrument plus petit peut adoucir les détails : la combinaison sera comparée au principal seul.")
         models = {d: model(p, d) for d in {s.get("device") for s in ses}}
@@ -400,14 +400,19 @@ class Empilement(Step):
         out = {"outputs": {}, "info": [], "extra": {"groups": {}}, "images": [], "linear": True}
         for dev in g:
             r = self.run_group(ctx, prm, proc_dir(p, dev), g[dev]["total"], excl.get(dev, []), dev)
-            f = p.abs(r["outputs"]["stack"])
             out["outputs"][f"stack_{dev}"] = r["outputs"]["stack"]
+            for k in ("stack_lp", "stack_ir"):                 # mode B : un stack par filtre de cet appareil
+                if k in r["outputs"]:
+                    out["outputs"][f"{k}_{dev}"] = r["outputs"][k]
             out["info"] += [f"— {model(p, dev)} —"] + r["info"]
             out["extra"]["groups"][dev] = r["extra"]
-            img = ctx.out(tag, f"stack_{dev}", ".jpg", folder="apercus")
-            fitsio.preview(f, img, True)
-            out["images"].append(ctx.rel(img))
-        out["info"].append("Stacks séparés par appareil : prochaine étape, « Combinaison des appareils ».")
+            keys = [k for k in ("stack_lp", "stack_ir") if k in r["outputs"]] if p.mode == "B" else ["stack"]
+            for k in keys:
+                img = ctx.out(tag, f"{k}_{dev}", ".jpg", folder="apercus")
+                fitsio.preview(p.abs(r["outputs"][k]), img, True)
+                out["images"].append(ctx.rel(img))
+        out["info"].append("Stacks séparés par appareil" + (" et par filtre" if p.mode == "B" else "")
+                           + " : prochaine étape, « Combinaison des appareils ».")
         return out
 
     def run_group(self, ctx, prm, proc, total, excl, dev=""):
@@ -436,8 +441,24 @@ class Empilement(Step):
         info = [f"Poses alignées et retenues : {n} sur {total}" + (f" ({len(excl)} écartées à la main)" if excl else "")]
         stack_cmd = "rej 3 3 -norm=addscale -output_norm -rgb_equal -maximize -feather=5 -weight=noise"
         outputs, extra = {}, {}
-        if p.mode == "B":
-            filters = [inventory.norm_filter(fits.getheader(str(f)).get("FILTER"), "") for f in rfiles]
+        filters = [inventory.norm_filter(fits.getheader(str(f)).get("FILTER"), "") for f in rfiles] if p.mode == "B" else []
+        seul = next(iter(set(filters))) if dev and len(set(filters)) == 1 and filters[0] in ("LP", "IRCUT") else None
+        if seul:
+            # mode B à plusieurs appareils : cet appareil n'a qu'un des deux filtres, un seul stack, rangé à son filtre
+            stem = f"{T}_{seul}_stack"
+            dropped = stack_retry(ctx, proc, "r_combined_", stack_cmd, f"../{stem}", f"stack_{dev}_{seul}")
+            f = _find(p.root, stem)
+            if not f:
+                raise RuntimeError("stack absent après `stack`")
+            hdr = fits.getheader(str(f))
+            key = "stack_lp" if seul == "LP" else "stack_ir"
+            outputs = {"stack": ctx.rel(f), key: ctx.rel(f)}
+            extra = {"stacks": {seul: [int(hdr.get("STACKCNT") or 0), hdr.get("LIVETIME")]}}
+            info.append(f"Un seul filtre pour cet appareil ({seul}) : un stack {seul} de {hdr.get('STACKCNT')} poses, "
+                        f"{hdr.get('LIVETIME')} s, combiné aux autres stacks {seul} à l'étape suivante.")
+            if dropped:
+                info.append(drop_info(dropped))
+        elif p.mode == "B":
             lp = [i + 1 for i, f in enumerate(filters) if f == "LP"]
             ir = [i + 1 for i, f in enumerate(filters) if f == "IRCUT"]
             if not lp or not ir or lp != list(range(1, len(lp) + 1)):
@@ -483,6 +504,7 @@ class Empilement(Step):
             extra = {"stacks": {"LP": [c1, h1.get("LIVETIME")], "IRCUT": [c2, h2.get("LIVETIME")]},
                      "principal": "LP" if p.type == "nebuleuse" else "IRCUT"}
             hdr = fits.getheader(str(main))
+            extra.update(stackcnt=c1 + c2, livetime=float(h1.get("LIVETIME") or 0) + float(h2.get("LIVETIME") or 0))
         else:
             stem = f"{T}_stack" if dev else f"{T}_true_combined"
             dropped = stack_retry(ctx, proc, "r_combined_", stack_cmd, f"../{stem}", f"stack{('_' + dev) if dev else ''}")
@@ -494,7 +516,9 @@ class Empilement(Step):
             info.append(f"STACKCNT {hdr.get('STACKCNT')} · LIVETIME {hdr.get('LIVETIME')} s")
             if dropped:
                 info.append(drop_info(dropped))
-        extra.update(n_aligned=n, stackcnt=hdr.get("STACKCNT"), livetime=hdr.get("LIVETIME"),
+        extra.setdefault("stackcnt", hdr.get("STACKCNT"))
+        extra.setdefault("livetime", hdr.get("LIVETIME"))
+        extra.update(n_aligned=n,
                      dims=[hdr.get("NAXIS1"), hdr.get("NAXIS2")], date=str(hdr.get("DATE-OBS", ""))[:19],
                      ra=hdr.get("RA"), dec=hdr.get("DEC"), focal=hdr.get("FOCALLEN"), pix=hdr.get("XPIXSZ"),
                      excl=excl)
@@ -511,7 +535,8 @@ class Empilement(Step):
             p.state["facts"].update(n_aligned=sum(e["n_aligned"] for e in ex["groups"].values()),
                                     stackcnt=sum(int(e.get("stackcnt") or 0) for e in ex["groups"].values()),
                                     livetime=sum(float(e.get("livetime") or 0) for e in ex["groups"].values()))
-            p.state["files"].pop("stack", None)       # le stack commun vient de l'étape de combinaison
+            for k in ("stack", "stack2", "stack_lp", "stack_ir"):
+                p.state["files"].pop(k, None)         # les stacks communs viennent de l'étape de combinaison
         else:
             p.state["facts"].update(ex)
 

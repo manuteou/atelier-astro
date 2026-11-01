@@ -7,6 +7,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 E2E = [["A", "nebuleuse"], ["B", "nebuleuse"], ["B", "galaxie"], ["A", "nebuleuse", "multi"], ["C", "galaxie", "multi"],
+       ["B", "nebuleuse", "multi"], ["B", "galaxie", "multi"], ["B", "nebuleuse", "multi2"],
        ["A", "nebuleuse", "generique"]]
 SUITE = [("import en vrac", ["test_import.py"]), ("annulation et progression", ["test_annulation.py"]),
          ("propositions de réglage fin", ["test_suggest.py"])]

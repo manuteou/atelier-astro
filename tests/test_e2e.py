@@ -12,7 +12,8 @@ sys.path.insert(0, str(HERE.parent))
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "A"
 TTYPE = sys.argv[2] if len(sys.argv) > 2 else "nebuleuse"
-MULTI = len(sys.argv) > 3 and sys.argv[3] == "multi"     # ajoute une session S30 Pro (focale 160 mm, tournée)
+MULTI = len(sys.argv) > 3 and sys.argv[3] in ("multi", "multi2")   # ajoute une session S30 Pro (focale 160 mm, tournée)
+MULTI2 = len(sys.argv) > 3 and sys.argv[3] == "multi2"             # … avec les deux filtres (LP et IRCUT) sur le S30
 GENERIC = len(sys.argv) > 3 and sys.argv[3] == "generique"   # caméra astro quelconque + calibration + outils Siril
 tmp = Path(tempfile.mkdtemp(prefix="atelier_"))
 os.environ["ATELIER_ROOT"] = str(tmp / "Astrophoto")
@@ -24,7 +25,7 @@ if GENERIC:
     (tmp / "Astrophoto").mkdir(parents=True)
     make_generic(tmp / "vrac")
 else:
-    make(tmp / "Astrophoto", s30=6 if MULTI else 0, s30_filter="IRCUT" if MODE == "C" else "LP")
+    make(tmp / "Astrophoto", s30=6 if MULTI else 0, s30_filter="LP+IRCUT" if MULTI2 else ("IRCUT" if MODE == "C" else "LP"))
 
 from app import config  # noqa
 if config.CONFIG_PATH.exists():
@@ -125,9 +126,24 @@ if os.environ.get("MOCK_CRASH_WEIGHT"):
 if MULTI:
     st, vs = run("S3B", [{"mode": "combinaison", "poids": 1.0}, {"mode": "combinaison", "poids": 0.5},
                          {"mode": "principal"}, {"mode": "secondaire"}])
-    det = vs[0]["extra"]["multi"]["appareils"]["S30"]
-    print("  alignement S30 → S50 :", {k: det[k] for k in ("echelle", "rotation_deg", "etoiles", "rms_px", "poids_relatif")})
-    assert abs(det["echelle"] - 1.625) < 0.02 and abs(abs(det["rotation_deg"]) - 3) < 0.3, det
+    if MODE == "B":
+        from astropy.io import fits as _f
+        main_f = "LP" if TTYPE == "nebuleuse" else "IRCUT"
+        for v in vs:
+            o = v["outputs"]
+            assert set(o) == {"stack", "stack2"}, o
+            h1, h2 = (_f.getheader(str(tmp / "Astrophoto" / NAME / o[k])) for k in ("stack", "stack2"))
+            assert (h1["NAXIS1"], h1["NAXIS2"]) == (h2["NAXIS1"], h2["NAXIS2"]), "les deux stacks du mode B doivent avoir la même taille"
+            assert h1["FILTER"] == main_f and h2["FILTER"] != main_f, (h1["FILTER"], h2["FILTER"])
+        fl = vs[0]["extra"]["multi"]["filtres"]
+        print("  mode B, appareils par filtre :", fl)
+        s30_has = {"LP", "IRCUT"} if MULTI2 else {"LP"}
+        assert all(("S30" in fl[F]) == (F in s30_has) for F in fl), fl
+        assert fl[main_f][0] == "S50" and vs[2]["extra"]["multi"]["filtres"][main_f] == ["S50"], "principal seul"
+    if "S30" in vs[0]["extra"]["multi"]["appareils"]:
+        det = vs[0]["extra"]["multi"]["appareils"]["S30"]
+        print("  alignement S30 → S50 :", {k: det[k] for k in ("echelle", "rotation_deg", "etoiles", "rms_px", "poids_relatif")})
+        assert abs(det["echelle"] - 1.625) < 0.02 and abs(abs(det["rotation_deg"]) - 3) < 0.3, det
     val("S3B", 0)
 run("S4"); val("S4")
 proj = ok(c.get(f"/api/projects/{NAME}"))

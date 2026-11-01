@@ -47,8 +47,9 @@ def make(root, n_lp=8, n_ir=6, H=360, W=480, seed=1, s30=0, s30_filter="LP"):
     root = Path(root)
     stars = sky(seed)
     sessions = [("NGC7000_LP_s1", "LP", n_lp, "S50", 0.0, (0, 0)), ("NGC7000_IR_s2", "IRCUT", n_ir, "S50", 0.0, (0, 0))]
-    if s30:
-        sessions.append((f"NGC7000_S30_{s30_filter}", s30_filter, s30, "S30", 3.0, (6, -4)))
+    if s30:                                             # s30_filter : "LP", "IRCUT" ou "LP+IRCUT" (les deux)
+        for f30 in s30_filter.split("+"):
+            sessions.append((f"NGC7000_S30_{f30}", f30, s30, "S30", 3.0, (6, -4)))
     for name, filt, n, dev, rot, shift in sessions:
         neb, st, u = render(stars, dev, H, W, rot, shift)
         grad = 0.02 * (u - u.min()) / (u.max() - u.min())

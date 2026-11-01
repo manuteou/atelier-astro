@@ -57,7 +57,7 @@ Les scripts Siril générés sont gardés dans `_scripts\` : on peut toujours vo
 
 | Phase | Étapes |
 |---|---|
-| Stacking | S1 inventaire, choix des filtres (A / B / C) et des appareils · S2 conversion, `register -2pass`, tri du fond de ciel · S3 `seqapplyreg` + `stack` (mode B : deux stacks contrôlés par STACKCNT) · S3B combinaison des appareils (seulement avec plusieurs appareils) · S4 mesure FWHM / S/N (facultatif) |
+| Stacking | S1 inventaire, choix des filtres (A / B / C) et des appareils · S2 conversion, `register -2pass`, tri du fond de ciel · S3 `seqapplyreg` + `stack` (mode B : deux stacks contrôlés par STACKCNT) · S3B combinaison des appareils (seulement avec plusieurs appareils ; en mode B, filtre par filtre) · S4 mesure FWHM / S/N (facultatif) |
 | 1 · Linéaire | P0 recadrage (rectangle dessiné sur le stack) · P1 GraXpert · P2 SPCC + correction S50 Pro · P3 BXT · P4 NXT linéaire |
 | 2 · Étirement et étoiles | P5 étirement (autostretch, mtf calé sur le fond, autoghs, Statistical Stretch) + neutralisation par canal · P6 StarX · P6N noirs du fond sur le calque sans étoiles (facultatif) · P6B piste secondaire (mode B) · P7 étoiles (sélection étoile par étoile, puissance, garder, supprimer ; amas protégé par un clic) · P7T image naturelle |
 | 3 · Couleurs et export | P7BIS couleur des étoiles · P8 couleurs (satu, objet entier, doré/lave, bleu froid, rose/magenta, rouge Hα, émeraude, dégradé de deux couleurs au choix, palettes HOO et cuivre-bleu tirées du LP, régions HII du LP) + aplanissement et contraste local · P8F réglage fin en direct (température, teinte, rotation, saturation, vibrance, luminosité, noirs ; l'aperçu change à chaque mouvement de curseur, puis application en pleine résolution ; bouton « Proposer des réglages » : curseurs placés d'après des mesures du fond, de la dominante et de la saturation, avec l'explication) · P9 fusion en écran · P10 NXT final · P11 retouches locales (éditeur : outil point vert ou anneau d'étoile, zoom à la molette, clic sur le défaut, correction visible tout de suite) · P12 export (JPEG HD/partage, TIFF 16 bits, sRGB, rotation exacte) |
@@ -152,7 +152,14 @@ L'appareil de chaque session est lu dans l'en-tête des poses (INSTRUME, sinon l
 À regarder au premier essai réel : le nombre d'étoiles communes et l'écart résiduel (au-dessus de 1 px, alerte),
 l'échelle mesurée comparée aux focales (alerte au-delà de 5 %), et surtout le zoom « combinaison / principal seul »
 sur des étoiles et une zone fine : si la combinaison adoucit trop, baisse le poids ou garde le principal seul.
-Pas encore possible : plusieurs appareils **et** mode B (deux stacks LP / IRCUT) dans le même projet.
+
+**Plusieurs appareils et mode B** (deux stacks LP / IRCUT) : en S3, chaque appareil empile chacun de ses filtres à
+part (un appareil qui n'a qu'un des deux filtres ne fait que celui-là). En S3B, la combinaison se fait **filtre par
+filtre** : les stacks LP de tous les appareils ensemble, les stacks IRCUT ensemble, chacun égalisé seulement sur un
+stack du même filtre. Tous sont remis sur la grille du stack principal de l'appareil principal (LP pour une
+nébuleuse, IRCUT pour une galaxie) : les deux résultats ont exactement la même taille, comme l'exige la piste
+secondaire du mode B (P6B). Les variantes « principal seul » et « autre(s) appareil(s) seul(s) » s'appliquent à
+chaque filtre ; si l'appareil choisi n'a pas l'un des filtres, l'appli prend celui d'un autre appareil et le dit.
 
 ## Ce qui a été vérifié, ce qui reste à vérifier
 

@@ -5,6 +5,10 @@ Puis chaque stack secondaire est aligné sur le principal (étoiles, échelle et
 géométrie, égalisé canal par canal sur le principal (même fond, même réponse couleur : la calibration couleur
 se fait ensuite une seule fois, sur le résultat, avec le profil du principal) et combiné en linéaire, chaque
 stack pondéré par son bruit mesuré. Les pixels non couverts par un secondaire gardent le principal seul.
+
+Mode B (deux filtres) : la même chose filtre par filtre. Chaque appareil apporte ses stacks LP et/ou IRCUT ; tous
+sont remis sur la grille du stack principal de l'appareil principal (les deux résultats ont donc exactement la même
+taille, comme l'exige la suite du mode B), et chaque stack n'est égalisé et combiné qu'avec ceux du même filtre.
 """
 import json
 from pathlib import Path
@@ -48,6 +52,9 @@ def _cached(ctx, dev, kind, src, params, make):
     return out
 
 
+FK = {"LP": "lp", "IRCUT": "ir"}
+
+
 def _pix_scale(p, dev, hdr):
     """Secondes d'arc par pixel d'un stack : en-tête (FOCALLEN, XPIXSZ), sinon fiche Matériel."""
     from .. import materiel
@@ -81,17 +88,19 @@ class Combinaison(Step):
     ]
     default_variants = [{"mode": "combinaison", "poids": 1.0}, {"mode": "combinaison", "poids": 0.5}, {"mode": "principal"}]
     preview_key = "stack"
-    canonical = {"stack": "{T}_multi_combined.fit"}
+    canonical = {"stack": "{T}_multi_combined.fit", "stack2": "{T}_multi_combined_2.fit"}
 
     def applies(self, p):
         return (is_multi(p), "un seul appareil dans ce projet")
 
     def ready(self, p):
         ok = all(p.file(f"stack_{d}") for d in devices(p))
+        if ok and p.mode == "B":
+            ok = all(any(p.file(f"stack_{k}_{d}") for d in devices(p)) for k in ("lp", "ir"))
         return ok, "valider d'abord l'empilement par appareil (S3)"
 
-    def _prepare(self, ctx, dev, prm):
-        src = ctx.p.file(f"stack_{dev}")
+    def _prepare(self, ctx, dev, prm, src=None):
+        src = src or ctx.p.file(f"stack_{dev}")
 
         def mk_crop(out):
             d, h = fitsio.read(src)
@@ -106,6 +115,8 @@ class Combinaison(Step):
         return cur
 
     def run(self, ctx, prm, tag):
+        if ctx.p.mode == "B":
+            return self.run_b(ctx, prm, tag)
         p = ctx.p
         devs = devices(p)
         pr = devs[0]
@@ -185,8 +196,133 @@ class Combinaison(Step):
                 "extra": {"multi": {"mode": prm["mode"], "poids": prm["poids"], "graxpert": prm["graxpert"],
                                     "smoothing": prm["smoothing"], "appareils": details, "principal": pr}}}
 
+    # ------------------------------------------------------------------ mode B : filtre par filtre
+    def run_b(self, ctx, prm, tag):
+        p = ctx.p
+        devs = devices(p)
+        pr = devs[0]
+        main_f = "LP" if p.type == "nebuleuse" else "IRCUT"
+        sec_f = "IRCUT" if main_f == "LP" else "LP"
+        src = {(d, F): p.file(f"stack_{FK[F]}_{d}") for d in devs for F in (main_f, sec_f)}
+        src = {k: v for k, v in src.items() if v}
+        info, details, outputs, imgs, stacks = [], {}, {}, [], {}
+        chosen = {}
+        for F in (main_f, sec_f):
+            have = [d for d in devs if (d, F) in src]
+            if not have:
+                raise ValueError(f"aucun stack {F} : le mode B demande des poses des deux filtres")
+            if prm["mode"] == "principal":
+                sel = [pr] if pr in have else have[:1]
+            elif prm["mode"] == "secondaire":
+                sel = [d for d in have if d != pr] or [pr]
+            else:
+                sel = have
+            if prm["mode"] == "principal" and pr not in have:
+                info.append(f"{model(p, pr)} n'a pas de poses {F} : le stack {F} vient de {model(p, sel[0])}.")
+            if prm["mode"] == "secondaire" and sel == [pr]:
+                info.append(f"Aucun autre appareil n'a de poses {F} : le stack {F} vient du principal.")
+            chosen[F] = sel
+        # grille de référence : stack principal (sinon secondaire) de l'appareil principal, recadré de ses bords
+        gk = (pr, main_f) if (pr, main_f) in src else (pr, sec_f)
+        prep = {}
+
+        def prepared(k):
+            if k not in prep:
+                prep[k] = self._prepare(ctx, f"{k[0]}_{k[1]}", prm, src=src[k])
+            return prep[k]
+        G_, hG = fitsio.read(prepared(gk))
+        H, W = G_.shape[1:]
+        sc = {d: _pix_scale(p, d, fitsio.header(src[next(k for k in src if k[0] == d)])) for d in devs}
+        info.append(f"Grille de référence : stack {gk[1]} de {model(p, pr)}, {W}x{H} px (les deux résultats auront cette taille)")
+
+        def onto_grid(k):
+            """Stack k remis sur la grille de référence : (données, couverture, échelle, bilan d'alignement)."""
+            D, _ = fitsio.read(prepared(k))
+            if k == gk:
+                return D, D.max(0) > 0, 1.0, None
+            expected = sc[k[0]] / sc[pr] if sc.get(k[0]) and sc.get(pr) else None
+            t = align.similarity(D, G_, scale=expected)
+            lab = f"{model(p, k[0])} {k[1]}"
+            info.append(f"  {lab} aligné sur la grille : {t['etoiles']} étoiles communes, écart résiduel {t['rms_px']} px, "
+                        f"échelle x{t['echelle']}, rotation {t['rotation_deg']}°" + (", image miroir" if t["miroir"] else ""))
+            if expected and abs(t["echelle"] / expected - 1) > 0.05:
+                info.append(f"ATTENTION : {lab} : échelle mesurée x{t['echelle']} alors que focales et pixels donnent "
+                            f"x{expected:.3f} (alignement à vérifier sur le zoom)")
+            if t["rms_px"] > 1.0:
+                info.append(f"ATTENTION : {lab} : écart résiduel au-dessus de 1 px : étoiles possiblement doublées, vérifier le zoom.")
+            Dw, cov = align.warp(D, t["M"], (H, W))
+            return Dw, cov, t["echelle"], t
+
+        for F in (main_f, sec_f):
+            sel = chosen[F]
+            base_dev = pr if pr in sel else sel[0]
+            info.append(f"— Stack {F} ({'principal' if F == main_f else 'secondaire'} du mode B) : "
+                        + " + ".join(model(p, d) for d in sel) + " —")
+            B_, covB, eB, tB = onto_grid((base_dev, F))
+            nB = align.noise(fitsio.read(prepared((base_dev, F)))[0])
+            kB = max(eB, 1.0) ** 2
+            wB = 1.0 / (max(nB, 1e-9) ** 2 * kB)
+            num = B_ * covB * wB
+            den = covB.astype(np.float32) * wB
+            rels, det = 0.0, {}
+            for d in sel:
+                if d == base_dev:
+                    continue
+                Sw, cov, e, t = onto_grid((d, F))
+                Sm, coefs = align.linear_match(Sw, B_, cov & covB if (cov & covB).any() else cov, blur=0.5 * e)
+                S_native = fitsio.read(prepared((d, F)))[0]
+                ss = align.noise(S_native) / max(np.mean([c[0] for c in coefs]), 1e-6)
+                k2 = max(e, 1.0) ** 2
+                wS = prm["poids"] / (max(ss, 1e-9) ** 2 * k2) if prm["mode"] == "combinaison" else 1.0 / (max(ss, 1e-9) ** 2 * k2)
+                covf = cov.astype(np.float32)
+                num += wS * Sm * covf
+                den += wS * covf
+                rel = wS / wB
+                rels += rel if prm["mode"] == "combinaison" else 0
+                info.append(f"  {model(p, d)} {F} : couverture {cov.mean() * 100:.0f} %, égalisé sur le {F} de "
+                            f"{model(p, base_dev)} (R/V/B pente, décalage {coefs}), poids relatif {rel:.2f}")
+                det[d] = {**(t or {}), "egalisation": coefs, "poids_relatif": round(rel, 3), "couverture": round(float(cov.mean()), 3)}
+            if prm["mode"] == "combinaison" or len(sel) > 1:
+                data = np.where(den[None] > 0, num / np.maximum(den[None], 1e-12), 0).astype(np.float32)
+            else:
+                data = np.where(covB[None], B_, 0).astype(np.float32)
+            if len(sel) > 1:
+                info.append(f"  Gain théorique sur le bruit de fond du {F} : x{np.sqrt(1 + rels):.2f} (indicatif).")
+            hb = fitsio.header(prepared((base_dev, F))).copy()
+            hb["FILTER"] = F
+            lt = float(hb.get("LIVETIME") or 0)
+            if lt and rels:
+                hb["LIVETIME"] = (round(lt * (1 + rels), 1), "equivalent principal (combinaison multi-appareils)")
+            hb["HISTORY"] = f"Atelier astro : combinaison {F} " + " + ".join(model(p, d) for d in sel)
+            out = ctx.out(tag, f"multi_{F}")
+            fitsio.write(out, data, hb)
+            if F == main_f:
+                outputs["stack"] = ctx.rel(out)
+                details = det
+                if len(sel) > 1:
+                    info += checks.doubled_stars(data, ref=B_)
+            else:
+                outputs["stack2"] = ctx.rel(out)
+                img = ctx.out(tag, f"multi_{F}", ".jpg", folder="apercus")
+                fitsio.preview(out, img, True)
+                imgs.append(ctx.rel(img))
+            g = p.state["facts"].get("groups") or {}
+            stacks[F] = [sum(int((g.get(d, {}).get("stacks") or {}).get(F, [0, 0])[0] or 0) for d in sel),
+                         sum(float((g.get(d, {}).get("stacks") or {}).get(F, [0, 0])[1] or 0) for d in sel)]
+        info.append("Les deux stacks sont sur la même grille : la piste secondaire du mode B pourra les superposer.")
+        return {"outputs": outputs, "info": info, "images": imgs, "linear": True,
+                "extra": {"multi": {"mode": prm["mode"], "poids": prm["poids"], "graxpert": prm["graxpert"],
+                                    "smoothing": prm["smoothing"], "appareils": details, "principal": pr,
+                                    "filtres": {F: chosen[F] for F in chosen}},
+                          "stacks": stacks, "principal_filtre": main_f}}
+
     def on_validate(self, p, var):
         p.state["facts"]["multi"] = var["extra"]["multi"]
+        if "stacks" in var["extra"]:                  # mode B : poses et temps par filtre (fiche technique)
+            p.state["facts"]["stacks"] = var["extra"]["stacks"]
+            p.state["facts"]["principal"] = var["extra"]["principal_filtre"]
+        else:
+            p.state["files"].pop("stack2", None)
 
     def notes(self, p, st):
         m = p.state["facts"].get("multi") or {}
