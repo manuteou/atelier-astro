@@ -10,7 +10,7 @@ E2E = [["A", "nebuleuse"], ["B", "nebuleuse"], ["B", "galaxie"], ["A", "nebuleus
        ["B", "nebuleuse", "multi"], ["B", "galaxie", "multi"], ["B", "nebuleuse", "multi2"],
        ["A", "nebuleuse", "generique"]]
 SUITE = [("import en vrac", ["test_import.py"]), ("annulation et progression", ["test_annulation.py"]),
-         ("propositions de réglage fin", ["test_suggest.py"])]
+         ("propositions de réglage fin", ["test_suggest.py"]), ("réglage fin : aperçu = pleine résolution", ["test_tune_js.py"])]
 SUITE += [("bout en bout " + " ".join(a), ["test_e2e.py"] + a) for a in (E2E[:1] if "--rapide" in sys.argv else E2E)]
 if "--rapide" not in sys.argv:
     SUITE += [("bout en bout B nebuleuse, Siril qui plante", ["test_e2e.py", "B", "nebuleuse"], {"MOCK_CRASH_WEIGHT": "1"}),

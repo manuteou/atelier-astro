@@ -1,6 +1,6 @@
 """Opérations de couleur sur image étirée (0-1, forme (3, H, W)).
 
-`tune` est le réglage fin de l'étape P8F : la même formule est réécrite en JavaScript (web/app.js, liveTune)
+`tune` est le réglage fin de l'étape P8F : la même formule est réécrite en JavaScript (web/js/etapes/reglage_fin.js, liveTune)
 pour l'aperçu en direct ; l'application en pleine résolution passe par ici. Toute modification doit être faite
 des deux côtés.
 """
@@ -46,8 +46,41 @@ def hue_matrix(deg):
     ], np.float32)
 
 
+TONE_SH, TONE_HL = 0.25, 0.20       # amplitude maximale des curseurs « ombres » et « hautes lumières »
+CLARTE_SIGMA = 0.012                # rayon du contraste local, en part de la largeur de l'image (même rendu à toute taille)
+
+
+def tone_curve(L, ombres, hautes):
+    """Courbe de tons sur la luminance : « ombres » éclaire les tons faibles et moyens (bosse centrée vers 1/3),
+    « hautes lumières » retient les tons clairs (bosse vers 3/4). Mêmes formules en JavaScript (liveTune)."""
+    L = np.clip(L, 0, 1)
+    s1 = L * (1 - L) ** 2 * 6.75
+    s2 = L ** 3 * (1 - L) * (256 / 27)
+    return np.clip(L + TONE_SH * ombres * s1 - TONE_HL * hautes * s2, 0, 1)
+
+
+def box_radius(width):
+    """Rayon des trois passes de flou boîte qui approchent un flou gaussien de sigma CLARTE_SIGMA x largeur."""
+    sig = CLARTE_SIGMA * width
+    w = np.sqrt(12 * sig * sig / 3 + 1)
+    return max(1, int(round((w - 1) / 2)))
+
+
+def box_blur3(L, r):
+    """Trois passes de moyenne glissante (2r+1) horizontale puis verticale, bords répétés : exactement le flou de
+    l'aperçu en direct (liveTune), pour que le contraste local y soit identique."""
+    import cv2
+    out = L.astype(np.float32)
+    for _ in range(3):
+        out = cv2.blur(out, (2 * r + 1, 1), borderType=cv2.BORDER_REPLICATE)
+        out = cv2.blur(out, (1, 2 * r + 1), borderType=cv2.BORDER_REPLICATE)
+    return out
+
+
 def tune(x, prm, sky):
-    """Réglage fin. prm : temperature, teinte, rotation, saturation, vibrance, luminosite, noirs, proteger_fond."""
+    """Réglage fin. prm : temperature, teinte, rotation, saturation, sat_rouge, sat_bleu, vibrance, luminosite,
+    ombres, hautes_lumieres, clarte, noirs, proteger_fond. Ordre : balance, rotation, saturations, tons moyens,
+    noirs, contraste local (objet seul), protection du fond, courbe ombres / hautes lumières (depuis le ciel)."""
     r, g, b = x[0].copy(), x[1].copy(), x[2].copy()
     t, m = prm.get("temperature", 0.0), prm.get("teinte", 0.0)
     r *= 1 + 0.12 * t
@@ -58,11 +91,17 @@ def tune(x, prm, sky):
         M = hue_matrix(prm["rotation"])
         y = np.einsum("ij,jhw->ihw", M, y)
     L = y.mean(0)
-    sat = prm.get("saturation", 0.0)
-    vib = prm.get("vibrance", 0.0)
+    sat, vib = prm.get("saturation", 0.0), prm.get("vibrance", 0.0)
+    sr, sb = prm.get("sat_rouge", 0.0), prm.get("sat_bleu", 0.0)
     mx, mn = y.max(0), y.min(0)
     s_norm = (mx - mn) / np.maximum(mx, 1e-6)
     f = (1 + sat) * (1 + vib * (1 - np.clip(s_norm, 0, 1)))
+    if sr or sb:
+        # part « rouge » (Hα) et « bleu-turquoise » (OIII) de la couleur de chaque pixel
+        ch = np.maximum(mx - mn, 1e-6)
+        wr = np.clip((y[0] - (y[1] + y[2]) / 2) / ch, 0, 1)
+        wb = np.clip(((y[1] + y[2]) / 2 - y[0]) / ch, 0, 1)
+        f = f * np.maximum(1 + sr * wr + sb * wb, 0)
     y = L[None] + f[None] * (y - L[None])
     gam = prm.get("luminosite", 1.0)
     y = np.clip(y, 0, 1) ** (1 / max(gam, 0.05))
@@ -70,11 +109,25 @@ def tune(x, prm, sky):
     if nb:
         y = np.clip((y - nb) / (1 - nb), 0, 1)
     y = np.clip(y, 0, 1)
+    L0 = x.mean(0)
+    w = np.clip((L0 - sky) / 0.25, 0, 1)
+    w = w * w * (3 - 2 * w)                       # 0 dans le ciel, 1 dans l'objet
+    cl = prm.get("clarte", 0.0)
+    if cl:
+        L2 = y.mean(0)
+        det = L2 - box_blur3(L2, box_radius(x.shape[2]))
+        y = np.clip(y + (1.5 * cl * det * w)[None], 0, 1)
     if prm.get("proteger_fond", True):
-        L0 = x.mean(0)
-        w = np.clip((L0 - sky) / 0.25, 0, 1)
-        w = w * w * (3 - 2 * w)
         y = x * (1 - w) + y * w
+    om, hl = prm.get("ombres", 0.0), prm.get("hautes_lumieres", 0.0)
+    if om or hl:
+        # courbe comptée depuis le niveau du ciel : le ciel ne bouge pas, la nébuleuse faible (trop proche du ciel
+        # pour échapper à la protection du fond) s'éclaire quand même
+        L1 = y.mean(0)
+        u = np.clip((L1 - sky) / max(1 - sky, 1e-6), 0, 1)
+        L2 = sky + tone_curve(u, om, hl) * (1 - sky)
+        k = np.where(L1 > sky, L2 / np.maximum(L1, 1e-6), 1.0)
+        y = np.clip(y * k[None], 0, 1)
     return np.clip(y, 0, 1).astype(np.float32)
 
 
@@ -102,7 +155,7 @@ def suggest(x, ttype="nebuleuse"):
     r, g, b = (float(np.median(x[c][mask])) for c in range(3))
     L = (r + g + b) / 3
     prm = {"temperature": 0.0, "teinte": 0.0, "saturation": 0.0, "vibrance": 0.0, "luminosite": 1.0, "noirs": 0.0,
-           "proteger_fond": True}
+           "proteger_fond": True, "sat_rouge": 0.0, "sat_bleu": 0.0, "ombres": 0.0, "hautes_lumieres": 0.0, "clarte": 0.0}
     lines = [f"Fond du ciel mesuré : R/V/B {r:.3f} / {g:.3f} / {b:.3f} (luminance {L:.3f})"]
     fix_sky = False
     # dominante chaude / froide du fond : rouge et bleu égaux

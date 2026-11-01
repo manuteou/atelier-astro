@@ -5,7 +5,8 @@ from .base import P, Step
 from .couleurs import clipped_pct, fused_preview, sky_of, stars_final
 
 
-FINE = ("temperature", "teinte", "rotation", "saturation", "vibrance", "luminosite", "noirs", "proteger_fond")
+FINE = ("temperature", "teinte", "rotation", "saturation", "sat_rouge", "sat_bleu", "vibrance", "luminosite", "ombres",
+        "hautes_lumieres", "clarte", "noirs", "proteger_fond")
 
 
 class ReglageFin(Step):
@@ -14,7 +15,11 @@ class ReglageFin(Step):
     help = ("Part de la variante validée à l'étape Couleurs et l'ajuste finement : chaque curseur modifie l'aperçu "
             "immédiatement (aperçu réduit, avec les étoiles). Température : plus chaud (orangé) ou plus froid (bleu). "
             "Teinte : vers le magenta ou vers le vert. Rotation : fait tourner toutes les couleurs. Saturation : toutes "
-            "les couleurs ; vibrance : surtout les couleurs encore ternes. Luminosité : éclaircit les tons moyens. "
+            "les couleurs ; saturation des rouges ou des bleus-turquoise : seulement l'Hα ou l'OIII (une bulle bleue sans "
+            "rouge criard) ; vibrance : surtout les couleurs encore ternes. Luminosité : éclaircit les tons moyens. "
+            "Ombres : éclaire les zones faibles et moyennes de la nébuleuse (lumière intérieure) ; hautes lumières : "
+            "retient le cœur pour qu'il ne brûle pas ; contraste local : relief des filaments et des nuages sombres, "
+            "sur l'objet seulement. "
             "Noirs : assombrit le fond. « Protéger le fond » laisse le ciel tel quel (seul l'objet change). Quand ça te "
             "plaît : « Appliquer en pleine résolution », puis valide.")
     params = [
@@ -22,8 +27,13 @@ class ReglageFin(Step):
         P("teinte", "Teinte (vert <-> magenta)", "float", 0.0, -1, 1, 0.02),
         P("rotation", "Rotation des couleurs (°)", "float", 0.0, -40, 40, 1),
         P("saturation", "Saturation", "float", 0.0, -0.6, 1.0, 0.02),
+        P("sat_rouge", "Saturation des rouges (Hα)", "float", 0.0, -0.6, 1.0, 0.02),
+        P("sat_bleu", "Saturation des bleus-turquoise (OIII)", "float", 0.0, -0.6, 1.0, 0.02),
         P("vibrance", "Vibrance (couleurs ternes)", "float", 0.0, 0, 1.0, 0.02),
         P("luminosite", "Luminosité des tons moyens", "float", 1.0, 0.6, 1.6, 0.01),
+        P("ombres", "Ombres de la nébuleuse (éclaircir)", "float", 0.0, 0, 1.0, 0.02),
+        P("hautes_lumieres", "Hautes lumières (retenir le cœur)", "float", 0.0, 0, 1.0, 0.02),
+        P("clarte", "Contraste local (relief)", "float", 0.0, 0, 1.0, 0.02),
         P("noirs", "Noirs (assombrir le fond)", "float", 0.0, 0, 0.15, 0.005),
         P("proteger_fond", "Protéger le fond du ciel", "bool", True),
     ]
@@ -62,7 +72,8 @@ class ReglageFin(Step):
 
     def notes(self, p, st):
         prm = st.get("params", {})
-        base = {"temperature": 0, "teinte": 0, "rotation": 0, "saturation": 0, "vibrance": 0, "luminosite": 1, "noirs": 0}
+        base = {"temperature": 0, "teinte": 0, "rotation": 0, "saturation": 0, "sat_rouge": 0, "sat_bleu": 0, "vibrance": 0,
+                "luminosite": 1, "ombres": 0, "hautes_lumieres": 0, "clarte": 0, "noirs": 0}
         ch = [f"{k} {prm[k]}" for k in base if k in prm and float(prm[k]) != base[k]]
         return "Réglage fin des couleurs : " + (", ".join(ch) if ch else "aucun changement") + \
                (" (fond protégé)" if prm.get("proteger_fond", True) else "")

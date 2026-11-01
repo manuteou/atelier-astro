@@ -51,7 +51,8 @@ for name, img in cases.items():
     out = color_ops.tune(img, prm, float(np.median(img.mean(0)[fitsio.sky_mask(img)])))
     r0, g0, b0 = sky_med(img)
     r1, g1, b1 = sky_med(out)
-    NEUTRE = {"temperature": 0.0, "teinte": 0.0, "saturation": 0.0, "vibrance": 0.0, "luminosite": 1.0, "noirs": 0.0, "proteger_fond": True}
+    NEUTRE = {"temperature": 0.0, "teinte": 0.0, "saturation": 0.0, "vibrance": 0.0, "luminosite": 1.0, "noirs": 0.0, "proteger_fond": True,
+              "sat_rouge": 0.0, "sat_bleu": 0.0, "ombres": 0.0, "hautes_lumieres": 0.0, "clarte": 0.0}
     changed = {k: v for k, v in prm.items() if v != NEUTRE[k] or type(v) != type(NEUTRE[k])}
     print(f"{name:10s}", changed,
           f"| fond {r0:.3f}/{g0:.3f}/{b0:.3f} -> {r1:.3f}/{g1:.3f}/{b1:.3f} | saturation {obj_chroma(img):.2f} -> {obj_chroma(out):.2f}")
