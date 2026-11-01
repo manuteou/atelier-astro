@@ -245,6 +245,21 @@ class PisteSecondaire(Step):
                 else "Piste secondaire (mode B) : régions HII du LP")
 
 
+def attenuer_halos(path, force, seuil=0.35):
+    """Atténue la partie diffuse du calque d'étoiles (sous `seuil`) : les cœurs, au-dessus, sont inchangés ; les halos
+    et le pied des étoiles sont abaissés d'autant plus qu'ils sont faibles. Écrit le fichier en place."""
+    d, h = fitsio.read(path)
+    mx = d.max(0)
+    halo = (mx > 0.005) & (mx < 0.15)
+    avant = float(d[:, halo].sum()) if halo.any() else 0.0
+    f = np.clip(mx / seuil, 0, 1) ** float(force)          # 0.25 léger, 0.5 moyen (~30 % du halo gardé), 1 fort
+    d2 = (d * f[None]).astype(np.float32)
+    fitsio.write(path, d2, h)
+    apres = float(d2[:, halo].sum()) if halo.any() else 0.0
+    return [f"Halos atténués (force {force:.2f}) : lumière des halos diffus {100 * apres / max(avant, 1e-9):.0f} % de "
+            "l'original ; cœurs des étoiles inchangés"]
+
+
 class Etoiles(Step):
     id, phase, kind = "P7", "2 · Étirement et étoiles", "creatif"
     title = "Gestion des étoiles"
@@ -269,6 +284,9 @@ class Etoiles(Step):
           help="centre x, centre y, rayon, nombre d'étoiles gardées en plus — se remplit tout seul avec l'outil « Protéger un amas »"),
         P("k", "Exposant k", "float", 2.5, 1.0, 6, 0.1, show_if={"methode": ["puissance"]},
           help="1.5 léger · 2.5 moyen · 4 fort"),
+        P("halos", "Atténuer les halos", "float", 0.0, 0.0, 1.0, 0.05, show_if={"methode": ["selection", "garder"]},
+          help="réduit l'aura diffuse autour des étoiles brillantes (halo rose du filtre LP, reflets) sans toucher à "
+               "leur cœur ; 0 = halos d'origine · 0.25 léger · 0.5 moyen · 1 fort. En mode B nébuleuse, préfère d'abord les étoiles IRCUT"),
     ]
     # peu d'étoiles d'abord : sur un champ de Voie lactée, quelques centaines d'étoiles laissent la nébuleuse
     # dominer et donnent de la profondeur
@@ -289,6 +307,12 @@ class Etoiles(Step):
 
     def ready(self, p):
         return (p.file("starless") is not None and p.file("stars_raw") is not None, "valider d'abord StarX (P6)")
+
+    def dyn_defaults(self, p):
+        # mode B nébuleuse : c'est tout l'intérêt de la piste IRCUT, ses étoiles n'ont pas le halo rose du filtre LP
+        if p.mode == "B" and p.type == "nebuleuse" and p.file("stars_ir"):
+            return {"source": "ir"}
+        return {}
 
     def compose_preview(self, ctx, outputs, tag=""):
         sl, hdr = fitsio.read(starless_layer(ctx.p))
@@ -334,6 +358,10 @@ class Etoiles(Step):
         else:
             outputs = {}
             info.append("Étoiles supprimées : le calque sans étoiles sera l'image finale.")
+        if "stars" in outputs and m in ("selection", "garder") and prm.get("halos", 0) > 0:
+            info += attenuer_halos(p.abs(outputs["stars"]), prm["halos"])
+        if prm["source"] == "ir" and not p.file("stars_ir"):
+            info.append("ATTENTION : étoiles IRCUT demandées mais pas encore préparées (étape P6B) : étoiles du stack principal utilisées.")
         if "stars" in outputs and src != p.file("stars_raw"):
             sl, _ = fitsio.read(starless)
             stv, _ = fitsio.read(p.abs(outputs["stars"]))
@@ -350,10 +378,16 @@ class Etoiles(Step):
         m = prm.get("methode")
         if m == "selection":
             s = f"Étoiles : sélection étoile par étoile, ciel {prm.get('n_ciel')}, objet {prm.get('n_objet')}, plancher {prm.get('plancher')}, halo {prm.get('halo')}"
-            return s + (f", amas {prm['amas']}" if prm.get("amas") else "")
-        if m == "puissance":
-            return f"Étoiles : réduction pow k={prm.get('k')}"
-        return f"Étoiles : {m}"
+            s += f", amas {prm['amas']}" if prm.get("amas") else ""
+        elif m == "puissance":
+            s = f"Étoiles : réduction pow k={prm.get('k')}"
+        else:
+            s = f"Étoiles : {m}"
+        if m in ("selection", "garder") and prm.get("halos"):
+            s += f", halos atténués {prm['halos']}"
+        if m != "supprimer" and prm.get("source") == "ir":
+            s += ", étoiles IRCUT"
+        return s
 
 
 def starless_layer(p):

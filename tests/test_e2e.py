@@ -183,9 +183,14 @@ run("P6"); val("P6")
 st, vs = run("P6N", [{"niveau": 18}, {"niveau": 6, "proteger": False, "douceur": 0}, {"niveau": 10}]); val("P6N", 2)
 if MODE == "B":
     run("P6B"); val("P6B")
-run("P7", [{"methode": "selection", "n_ciel": 150, "n_objet": 20, "amas": "200,60,30,10"},
+_, vs7 = run("P7", [{"methode": "selection", "n_ciel": 150, "n_objet": 20, "amas": "200,60,30,10"},
            {"methode": "puissance", "k": 2.5}, {"methode": "supprimer"},
-           {"methode": "selection", "n_ciel": 80, "n_objet": 10, "source": "ir"}]); val("P7", 0)
+           {"methode": "selection", "n_ciel": 80, "n_objet": 10, "source": "ir"},
+           {"methode": "garder", "halos": 0.5}]); val("P7", 0)
+assert any("Halos atténués" in l for l in vs7[4]["info"]), vs7[4]["info"]
+if MODE == "B" and TTYPE == "nebuleuse":
+    p7 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P7")
+    assert p7["dyn"].get("source") == "ir", "mode B nébuleuse : étoiles IRCUT proposées par défaut"
 run("P7T"); val("P7T")
 run("P7BIS", [{"K": 1.4}, {"K": 1.8}]); val("P7BIS", 1)
 variants = [{"methode": "satu", "satu": 0.3}, {"methode": "dore", "force": 0.3},
