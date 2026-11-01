@@ -280,10 +280,17 @@ class BXT(Step):
             "(0.5 / 0.25). Avec Siril : plus d'itérations = plus net, mais des anneaux sombres peuvent apparaître autour "
             "des étoiles. Juge sur un zoom avec une zone fine et une étoile brillante ; sur une galaxie, surveille le noyau. "
             "Outil : Réglages > Outils.")
-    params = [P("sn", "Netteté non stellaire (--sn)", "float", 0.75, 0, 1, 0.05, show_if={"_outil": ["rcastro", "perso"]},
-                help="avec une commande personnalisée : valeur de {force}"),
-              P("ss", "Netteté stellaire (--ss)", "float", 0.4, 0, 1, 0.05, show_if={"_outil": ["rcastro"]}),
-              P("ansp", "--ansp", "bool", True, show_if={"_outil": ["rcastro"]}),
+    params = [P("sn", "Netteté de la nébuleuse ou de la galaxie", "float", 0.75, 0, 1, 0.05, show_if={"_outil": ["rcastro", "perso"]},
+                help="détails de l'objet (filaments, bras, poussières) : plus haut = plus net, mais trop fort donne un "
+                     "aspect granuleux ou « dessiné » (option --sn de BlurXTerminator ; avec une commande personnalisée : "
+                     "valeur de {force})"),
+              P("ss", "Netteté et finesse des étoiles", "float", 0.4, 0, 1, 0.05, show_if={"_outil": ["rcastro"]},
+                help="resserre les étoiles (plus petites, plus rondes) : trop fort peut créer un anneau sombre autour "
+                     "des plus brillantes (option --ss)"),
+              P("ansp", "Mesurer le flou de l'image automatiquement (conseillé)", "bool", True, show_if={"_outil": ["rcastro"]},
+                help="BlurXTerminator mesure lui-même le flou de ton image (turbulence, mise au point) pour régler la "
+                     "netteté de l'objet ; décoché, il suppose un flou standard qui peut être faux pour ton instrument "
+                     "(option --ansp : « automatic non-stellar PSF »)"),
               P("iters", "Itérations (Richardson-Lucy)", "int", 10, 2, 40, 1, show_if={"_outil": ["siril"]})]
     default_variants = [{"sn": 0.75, "ss": 0.4, "iters": 10}, {"sn": 0.5, "ss": 0.25, "iters": 6}]
     preview_key = "bxt"
