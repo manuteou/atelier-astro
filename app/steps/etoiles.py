@@ -24,16 +24,18 @@ def controle_lines(ctx, path, extra=()):
 class Etirement(Step):
     id, phase, kind = "P5", "2 · Étirement et étoiles", "creatif"
     title = "Étirement et fond du ciel"
-    help = ("Rend l'image visible et fixe la teinte du fond du ciel : transparent (fond cible 0.25), neutre (0.15) ou "
-            "noir (0.07). Autres méthodes : courbe calée sur le niveau du fond (« mtf »), « autoghs » qui ménage un noyau "
+    help = ("Rend l'image visible et règle la luminosité des tons moyens : doux (fond cible 0.15), standard (0.25) ou "
+            "poussé (0.35). Un fond cible plus haut éclaire l'intérieur de la nébuleuse et donne de la profondeur ; un "
+            "fond très noir (0.07) écrase ces tons moyens. Pour un ciel plus sombre, mieux vaut un étirement standard puis "
+            "l'étape « Noirs du fond », qui n'assombrit que le ciel. Autres méthodes : courbe calée sur le niveau du fond (« mtf »), « autoghs » qui ménage un noyau "
             "très brillant, ou Statistical Stretch qui fait tout automatiquement. Le fond est ensuite remis au gris "
             "neutre, canal par canal ; sans cela il sortirait teinté.")
     params = [
         P("methode", "Méthode", "choice", "autostretch",
           choices=[["autostretch", "autostretch lié"], ["mtf", "mtf calé sur le fond"], ["autoghs", "autoghs (noyau brillant)"],
                    ["statistical", "Statistical Stretch"]]),
-        P("targetbg", "Fond cible", "float", 0.15, 0.02, 0.4, 0.01, show_if={"methode": ["autostretch"]},
-          help="0.07 noir · 0.15 neutre · 0.25 transparent"),
+        P("targetbg", "Fond cible", "float", 0.25, 0.02, 0.4, 0.01, show_if={"methode": ["autostretch"]},
+          help="0.15 doux · 0.25 standard · 0.35 poussé (tons moyens de l'objet plus lumineux) · 0.07 fond très noir"),
         P("shadows", "Écrêtage des ombres (sigma)", "float", -2.8, -5, 0, 0.1, show_if={"methode": ["autostretch"]}),
         P("fond", "Fond", "choice", "noir", choices=[["noir", "noir (b = M)"], ["neutre", "neutre (b = 0.97 M)"]],
           show_if={"methode": ["mtf"]}),
@@ -48,8 +50,10 @@ class Etirement(Step):
           help="quand la nébuleuse occupe une grande part du cadre, sa couleur fausse la mesure sur l'image entière "
                "et le fond sort teinté (cyan pour une nébuleuse rouge)"),
     ]
-    default_variants = [{"methode": "autostretch", "targetbg": 0.07}, {"methode": "autostretch", "targetbg": 0.15},
-                        {"methode": "autostretch", "targetbg": 0.25}]
+    # doux / standard / poussé, comme le pipeline : un fond cible plus haut éclaire les tons moyens de la nébuleuse
+    # (« lumière intérieure », profondeur) ; 0.07 écrase ces tons moyens dans le noir
+    default_variants = [{"methode": "autostretch", "targetbg": 0.15}, {"methode": "autostretch", "targetbg": 0.25},
+                        {"methode": "autostretch", "targetbg": 0.35}]
     preview_key = "etire_neutre"
     linear = False
     canonical = {"etire": "{T}_etire.fit", "etire_neutre": "{T}_etire_neutre.fit"}
@@ -266,7 +270,10 @@ class Etoiles(Step):
         P("k", "Exposant k", "float", 2.5, 1.0, 6, 0.1, show_if={"methode": ["puissance"]},
           help="1.5 léger · 2.5 moyen · 4 fort"),
     ]
-    default_variants = [{"methode": "selection", "n_ciel": 1500, "n_objet": 100},
+    # peu d'étoiles d'abord : sur un champ de Voie lactée, quelques centaines d'étoiles laissent la nébuleuse
+    # dominer et donnent de la profondeur
+    default_variants = [{"methode": "selection", "n_ciel": 300, "n_objet": 100},
+                        {"methode": "selection", "n_ciel": 1500, "n_objet": 100},
                         {"methode": "selection", "n_ciel": 5000, "n_objet": 300},
                         {"methode": "puissance", "k": 2.5}]
     preview_key = "stars"
@@ -413,13 +420,15 @@ class Noirs(Step):
             "le plus faible. Trop noir = franges de nébulosité perdues et bruit du fond plus visible : les contrôles "
             "indiquent la part de signal faible perdue.")
     params = [
-        P("niveau", "Niveau du fond visé (sur 255)", "float", 12, 2, 40, 1, help="actuellement : voir la médiane du fond dans l'aperçu de référence"),
+        P("niveau", "Niveau du fond visé (sur 255)", "float", 18, 2, 40, 1,
+          help="25 léger (proche du pipeline, qui ne fait que neutraliser le fond) · 18 moyen · 12 noir ; voir la "
+               "médiane du fond dans l'aperçu de référence"),
         P("proteger", "Protéger la nébuleuse", "bool", True),
         P("seuil_objet", "Début de la nébuleuse (percentile)", "float", 70, 40, 95, 1, show_if={"proteger": [True]},
           help="plus bas = protège davantage de zones faibles ; plus haut = assombrit plus près de l'objet"),
         P("douceur", "Douceur du pied de courbe", "float", 0.5, 0, 1, 0.05),
     ]
-    default_variants = [{"niveau": 18}, {"niveau": 10}, {"niveau": 10, "proteger": False}]
+    default_variants = [{"niveau": 25}, {"niveau": 18}, {"niveau": 12}]
     preview_key = "starless_noir"
     linear = False
     reference_step = "P6"

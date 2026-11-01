@@ -175,6 +175,8 @@ try:
         pg.evaluate("() => closeDlg()")
         print("  comparaison : rideau et zoom")
         cards = pg.query_selector_all(".rcard .thumb-wrap")
+        cards[0].scroll_into_view_if_needed()
+        pg.wait_for_timeout(200)
         tb = cards[0].bounding_box()
         pg.mouse.move(tb["x"] + tb["width"] / 2, tb["y"] + tb["height"] / 2)
         pg.mouse.wheel(0, -300)

@@ -128,7 +128,8 @@ class Couleurs(Step):
         P("c_force", "Force du contraste", "float", 0.6, 0.1, 1.2, 0.05, show_if={"contraste": [True]}),
         P("rayons", "Rayons", "text", "6,20,60", show_if={"contraste": [True]}),
     ]
-    default_variants = [{"methode": "satu", "satu": 0.15}, {"methode": "satu", "satu": 0.3}, {"methode": "dore", "force": 0.3}]
+    default_variants = [{"methode": "satu", "satu": 0.15}, {"methode": "satu", "satu": 0.3}, {"methode": "dore", "force": 0.3},
+                        {"methode": "dore", "force": 0.6}]
     preview_key = "G_final"
     linear = False
     reference_step = "P7T"
