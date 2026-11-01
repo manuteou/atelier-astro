@@ -250,9 +250,11 @@ def attenuer_halos(path, force, seuil=0.35):
     et le pied des étoiles sont abaissés d'autant plus qu'ils sont faibles. Écrit le fichier en place."""
     d, h = fitsio.read(path)
     mx = d.max(0)
-    halo = (mx > 0.005) & (mx < 0.15)
+    halo = (mx > 0.02) & (mx < 0.2)
     avant = float(d[:, halo].sum()) if halo.any() else 0.0
-    f = np.clip(mx / seuil, 0, 1) ** float(force)          # 0.25 léger, 0.5 moyen (~30 % du halo gardé), 1 fort
+    # exposant 4 x force : 0.25 -> 1 (léger), 0.5 -> 2 (moyen, le plateau à 0.1 tombe à ~8 %), 1 -> 4 (comme la
+    # réduction par puissance sur les halos) ; au-dessus du seuil (cœurs), rien ne change
+    f = np.clip(mx / seuil, 0, 1) ** (4.0 * float(force))
     d2 = (d * f[None]).astype(np.float32)
     fitsio.write(path, d2, h)
     apres = float(d2[:, halo].sum()) if halo.any() else 0.0
@@ -285,14 +287,15 @@ class Etoiles(Step):
         P("k", "Exposant k", "float", 2.5, 1.0, 6, 0.1, show_if={"methode": ["puissance"]},
           help="1.5 léger · 2.5 moyen · 4 fort"),
         P("halos", "Atténuer les halos", "float", 0.0, 0.0, 1.0, 0.05, show_if={"methode": ["selection", "garder"]},
-          help="réduit l'aura diffuse autour des étoiles brillantes (halo rose du filtre LP, reflets) sans toucher à "
-               "leur cœur ; 0 = halos d'origine · 0.25 léger · 0.5 moyen · 1 fort. En mode B nébuleuse, préfère d'abord les étoiles IRCUT"),
+          help="réduit le plateau délavé autour des étoiles (pied des étoiles éclairci par l'étirement, qui ressort sur "
+               "un ciel assombri en P6N ; halo du filtre LP) sans toucher à leur cœur ; 0 = intact · 0.25 léger · "
+               "0.5 moyen · 1 fort"),
     ]
     # peu d'étoiles d'abord : sur un champ de Voie lactée, quelques centaines d'étoiles laissent la nébuleuse
     # dominer et donnent de la profondeur
-    default_variants = [{"methode": "selection", "n_ciel": 300, "n_objet": 100},
-                        {"methode": "selection", "n_ciel": 1500, "n_objet": 100},
-                        {"methode": "selection", "n_ciel": 5000, "n_objet": 300},
+    default_variants = [{"methode": "selection", "n_ciel": 300, "n_objet": 100, "halos": 0.5},
+                        {"methode": "selection", "n_ciel": 300, "n_objet": 100, "halos": 0},
+                        {"methode": "selection", "n_ciel": 1500, "n_objet": 100, "halos": 0.5},
                         {"methode": "puissance", "k": 2.5}]
     preview_key = "stars"
     linear = False
