@@ -1,0 +1,17 @@
+# Réglages et données personnelles (chemins, matériel, presets) : propres à chaque installation
+config.json
+config.bak
+presets/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Système et éditeurs
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
