@@ -20,12 +20,24 @@ def object_weight(L, lo_pc=60, hi_pc=99.5, blur=8):
     return (w * w * (3 - 2 * w)).astype(np.float32), float(hi)
 
 
-def gradient(x, c1, c2, force=0.5, gamma=1.4):
+def gradient(x, c1, c2, force=0.5, etendue=1.0, gamma=1.0):
     """Teinte de l'objet par un dégradé de deux couleurs (zones faibles -> zones lumineuses), luminance conservée,
-    ciel non touché (même principe que palette_doree_froide.py, couleurs au choix)."""
+    ciel non touché. `etendue` : 1 = toute la nébuleuse, franges faibles comprises (le dégradé part juste au-dessus
+    du ciel) ; 0 = seulement les zones lumineuses (au-dessus du 60e percentile, l'ancien comportement)."""
+    import cv2
+    from . import fitsio
     L = x.mean(0)
-    w, hi = object_weight(L)
-    t = np.clip(L / max(hi, 1e-6), 0, 1) ** gamma
+    ls = cv2.GaussianBlur(L, (0, 0), 8)
+    mask = fitsio.sky_mask(x)
+    sky = float(np.median(ls[mask])) if mask.any() else float(np.percentile(ls, 20))
+    bruit = 1.4826 * float(np.median(np.abs(ls[mask] - sky))) if mask.any() else 0.0
+    bas = sky + max(3 * bruit, 0.01)                       # juste au-dessus du ciel
+    p60, hi = float(np.percentile(ls, 60)), float(np.percentile(ls, 99.5))
+    lo = bas + (1 - float(np.clip(etendue, 0, 1))) * max(p60 - bas, 0)
+    rampe = max(4 * bruit, 0.04 * (hi - lo), 1e-6)         # entrée douce dans l'objet (au-dessus du bruit), pas de bord net
+    w = np.clip((ls - lo) / rampe, 0, 1)
+    w = (w * w * (3 - 2 * w)).astype(np.float32)
+    t = np.clip((ls - lo) / max(hi - lo, 1e-6), 0, 1) ** gamma
     a, b = hex_rgb(c1), hex_rgb(c2)
     col = a[:, None, None] * (1 - t) + b[:, None, None] * t
     col = col / np.maximum(col.mean(0, keepdims=True), 1e-6)          # même luminance que l'original

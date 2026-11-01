@@ -114,6 +114,9 @@ class Couleurs(Step):
                    ["hii", "Régions HII du LP (mode B galaxie)"]]),
         P("c1", "Couleur des zones faibles", "color", "#3a5fd0", show_if={"methode": ["degrade"]}),
         P("c2", "Couleur des zones lumineuses", "color", "#ffb070", show_if={"methode": ["degrade"]}),
+        P("etendue", "Jusqu'aux franges faibles", "float", 1.0, 0, 1, 0.05, show_if={"methode": ["degrade", "rose", "rouge", "emeraude"]},
+          help="1 = toute la nébuleuse prend les couleurs choisies, franges faibles comprises (seul le ciel garde sa "
+               "couleur) ; 0 = seulement les zones lumineuses, les franges gardent leur couleur d'origine"),
         P("satu", "Saturation", "float", 0.3, 0, 1, 0.05, show_if={"methode": ["satu"]}),
         P("force", "Force", "float", 0.5, 0.1, 1.5, 0.05,
           show_if={"methode": ["objet", "dore", "froid", "hii", "rose", "rouge", "emeraude", "degrade", "hoo", "cuivre_bleu"]},
@@ -169,8 +172,9 @@ class Couleurs(Step):
         elif m in GRADIENTS or m == "degrade":
             d, h = fitsio.read(cur)
             c1, c2 = (prm["c1"], prm["c2"]) if m == "degrade" else GRADIENTS[m]
-            fitsio.write(o, color_ops.gradient(d, c1, c2, prm["force"]), h)
-            info.append(f"Dégradé {c1} (zones faibles) -> {c2} (zones lumineuses), force {prm['force']} ; ciel non touché")
+            fitsio.write(o, color_ops.gradient(d, c1, c2, prm["force"], prm.get("etendue", 1.0)), h)
+            info.append(f"Dégradé {c1} (zones faibles) -> {c2} (zones lumineuses), force {prm['force']}, "
+                        f"jusqu'aux franges faibles {prm.get('etendue', 1.0)} ; ciel non touché")
         elif m in ("hoo", "cuivre_bleu"):
             info += self.narrowband(ctx, cur, o, m, prm["force"], tag)
         elif m == "hii":
@@ -219,7 +223,7 @@ class Couleurs(Step):
              "dore": f"doré/lave {prm.get('force')}", "froid": f"bleu froid {prm.get('force')}",
              "rose": f"rose/magenta {prm.get('force')}", "rouge": f"rouge Hα {prm.get('force')}",
              "emeraude": f"émeraude {prm.get('force')}",
-             "degrade": f"dégradé {prm.get('c1')} -> {prm.get('c2')} {prm.get('force')}",
+             "degrade": f"dégradé {prm.get('c1')} -> {prm.get('c2')} {prm.get('force')}, étendue {prm.get('etendue', 1.0)}",
              "hoo": f"palette HOO {prm.get('force')}", "cuivre_bleu": f"palette cuivre-bleu {prm.get('force')}",
              "hii": f"régions HII du LP {prm.get('force')}"}.get(m, m)
         s = f"Couleurs : {d}"
