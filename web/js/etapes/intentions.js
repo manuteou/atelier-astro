@@ -33,7 +33,8 @@ export function applyChanges(step, changes) {
 }
 
 export function intentBar(step) {
-  if (!step.phrases?.length && !S.ollama.ok) return null;
+  // seulement pour les choix de rendu : une étape qui mesure (S4) ou purement technique n'a rien à « régler au goût »
+  if (!step.phrases?.length && (!S.ollama.ok || step.kind !== "creatif")) return null;
   const msg = h("div", { class: "hint intent-msg" });
   const show = (title, lines, extra) => {
     S.intentMsg = { step: step.id, title, lines, extra };

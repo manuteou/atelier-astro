@@ -266,3 +266,6 @@ button.danger:disabled { opacity: .45; }
   .main img { max-width: 100%; }
 }
 .banner.finaliser { margin-top: 22px; }
+.zone-rect { position: absolute; border: 2px solid var(--accent2); background: rgba(63,166,255,.12); pointer-events: none; }
+.zone-rect span { position: absolute; left: 3px; top: 1px; font-size: 11px; color: #fff; text-shadow: 0 0 3px #000; }
+.zone-rect.live { border-style: dashed; }

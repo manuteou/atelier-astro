@@ -682,12 +682,17 @@ def mesure_alertes(lines):
 class Mesure(Step):
     id, phase, optional = "S4", "Stacking", True
     title = "Mesure du stack (FWHM, S/N)"
-    help = ("Ne modifie rien. Deux cartes : finesse et forme des étoiles sur tout le champ (avec un indice si un coin ou "
-            "un bord est plus flou : courbure, inclinaison, suivi, rotation de champ), et rapport signal/bruit, avec le "
-            "temps de pose qu'il faudrait en plus pour qu'une zone faible devienne propre. Utile pour décider s'il vaut la "
-            "peine de refaire une nuit. Si les cartes sont à l'envers par rapport à l'aperçu, coche « retourner ».")
-    params = [P("zones", "Zones (nom:x,y,w,h ; …)", "text", "", help="coordonnées affichées, origine en haut à gauche"),
-              P("retourner", "Retourner haut/bas", "bool", False)]
+    help = ("Contrôle de qualité du stack avant le traitement : cette étape ne modifie rien, elle mesure.\n"
+            "• Carte de finesse des étoiles (FWHM) et de leur forme : si les étoiles sont larges ou allongées, partout ou "
+            "dans un coin, l'appli donne la cause probable (poses floues ou bougées, optique, rotation de champ) et, sous "
+            "l'alerte, ce qu'il faut faire, avec un bouton qui y mène : refaire l'empilement (S3) en écartant les poses en "
+            "cause, ou laisser BlurXTerminator (P3) et le cadrage (P0) s'en charger.\n"
+            "• Carte du signal/bruit : où l'image est propre ou bruitée. Avec une zone dessinée sur une partie faible de "
+            "l'objet, elle dit combien de temps de pose il faudrait en plus pour qu'elle devienne propre : utile pour "
+            "décider s'il vaut la peine de refaire une nuit.\n"
+            "Sans alerte orange, il n'y a rien à corriger : valide et continue. L'étape peut aussi être passée.")
+    params = [P("zones", "Zones à mesurer", "text", "",
+                help="se remplit en dessinant sur l'image ci-dessus (nom:x,y,largeur,hauteur, origine en haut à gauche)")]
 
     def ready(self, p):
         return (p.file("stack") is not None, "pas encore de stack")
@@ -699,8 +704,6 @@ class Mesure(Step):
         args = [p.file("stack"), "--cible", p.T, "--sortie", out]
         for z in [z.strip() for z in prm["zones"].split(";") if z.strip()]:
             args += ["--zone", z]
-        if prm["retourner"]:
-            args.append("--retourner")
         ctx.py("mesure_stack.py", args)
         txt = out / f"mesure_{p.T}.txt"
         lines = txt.read_text(encoding="utf-8").splitlines() if txt.exists() else []

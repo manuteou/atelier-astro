@@ -117,6 +117,21 @@ try:
         assert all(a == am[0] for a in am) and 150 < x < 330 and r > 20 and n == 30, am   # image de test : 480 px
         print("  amas protégé dessiné :", am[0])
 
+        # 2e. S4 : zone de mesure dessinée à la souris, pas de barre « Dis ce que tu veux » (étape de mesure)
+        pg.evaluate("() => { S.sid = 'S4'; S.edit = {}; renderSteps(); renderMain(); }")
+        pg.wait_for_selector(".zones .amas-stage img")
+        pg.wait_for_function("() => document.querySelector('.zones .amas-stage img').naturalWidth > 0", timeout=10000)
+        assert pg.locator(".intent-bar, .intent-msg").count() == 0 and pg.locator("text=Dis ce que tu veux").count() == 0, \
+            "pas de barre d'intentions sur une étape de mesure"
+        zb = pg.query_selector(".zones .amas-stage img").bounding_box()
+        pg.mouse.move(zb["x"] + zb["width"] * 0.2, zb["y"] + zb["height"] * 0.3)
+        pg.mouse.down()
+        pg.mouse.move(zb["x"] + zb["width"] * 0.4, zb["y"] + zb["height"] * 0.5, steps=5)
+        pg.mouse.up()
+        zt = pg.evaluate("() => S.edit.S4[0].zones")
+        assert zt.startswith("zone1:") and len(zt.split(":")[1].split(",")) == 4, zt
+        print("  zone de mesure dessinée :", zt)
+
         # 3. cadrage : un cadre dessiné à la souris arrive dans les réglages
         pg.evaluate("() => { S.sid = 'P0'; S.edit = {}; renderSteps(); renderMain(); }")
         stage = pg.wait_for_selector(".crop-stage img, .cstage img, .cropper img")

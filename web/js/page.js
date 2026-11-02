@@ -6,6 +6,7 @@ import { initEditor, renderEditor, paramSummary } from "./editeur.js";
 import { cropper } from "./etapes/cadrage.js";
 import { posePicker } from "./etapes/poses.js";
 import { amasPicker } from "./etapes/amas.js";
+import { zonesPicker } from "./etapes/zones.js";
 import { intentBar } from "./etapes/intentions.js";
 import { ficheTools } from "./etapes/fiche.js";
 import { liveTuner } from "./etapes/reglage_fin.js";
@@ -59,6 +60,7 @@ export function renderMain() {
   if (step.interaction === "crop") main.append(cropper(step, () => renderEditor(step, box)));
   if (step.interaction === "poses" && step.ready) main.append(posePicker(step, () => renderEditor(step, box)));
   if (step.id === "P7" && step.ready) { const a = amasPicker(step, () => renderEditor(step, box)); if (a) main.append(a); }
+  if (step.id === "S4" && step.ready) { const z = zonesPicker(step, () => renderEditor(step, box)); if (z) main.append(z); }
   if (step.interaction === "live" && step.ready) main.append(liveTuner(step));
   if (step.interaction === "retouche" && step.ready) main.append(retoucher(step));
   main.append(box);
