@@ -679,6 +679,80 @@ def mesure_alertes(lines):
     return out
 
 
+def _hm(sec):
+    sec = max(float(sec), 0)
+    h, m = int(sec // 3600), int(round((sec % 3600) / 60))
+    if m == 60:
+        h, m = h + 1, 0
+    return f"{h} h {m:02d}" if h else f"{m} min"
+
+
+def projection(mesure_json, out_png):
+    """Courbe « qualité selon le nombre de poses » : S/N de chaque zone si l'on ajoutait des poses dans les mêmes
+    conditions (S/N proportionnel à la racine du temps). Retourne les lignes de résumé ; [] sans données."""
+    import json
+    import math
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    try:
+        d = json.loads(Path(mesure_json).read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    inf = d.get("infos") or {}
+    t, ex = inf.get("temps_s"), inf.get("exptime")
+    zones = [z for z in d.get("zones") or [] if z.get("sn") and z["sn"] > 0]
+    if not t or not zones:
+        return []
+    n_now = inf.get("stackcnt") or (t / ex if ex else None)
+    unite = "poses" if n_now else "heures"
+    x_now = float(n_now) if n_now else t / 3600
+    xs = [x_now * k / 100 for k in range(10, 501)]                      # de 10 % à 5 fois l'actuel
+    noms = {"nébulosité étendue (S/N > 1), quart le plus faible": "nébulosité faible (quart le plus faible)",
+            "nébulosité étendue (S/N > 1), médiane": "nébulosité moyenne (médiane)"}
+    fig, ax = plt.subplots(figsize=(9, 5.8), dpi=110)
+    couleurs = ["#3fa6ff", "#7c5cff", "#3ccf8e", "#f2b84b", "#ff6b6b", "#f08a3c"]
+    ymax = 0
+    for i, z in enumerate(zones[:6]):
+        sn = float(z["sn"])
+        ys = [sn * math.sqrt(x / x_now) for x in xs]
+        ymax = max(ymax, ys[-1])
+        c = couleurs[i % len(couleurs)]
+        ax.plot(xs, ys, color=c, lw=2, label=f"{noms.get(z['nom'], z['nom'])} (S/N {sn:.1f})")
+        ax.plot([x_now], [sn], "o", color=c, ms=7)
+        for k in (2, 4):
+            ax.plot([x_now * k], [sn * math.sqrt(k)], "o", color=c, ms=4, mfc="white")
+    for seuil, txt in ((3, "3 : signal visible mais bruité"), (5, "5 : correct"), (10, "10 : propre")):
+        if seuil < ymax * 1.15:
+            ax.axhline(seuil, color="#999", lw=0.8, ls="--")
+            ax.text(xs[-1], seuil, txt, ha="right", va="bottom", fontsize=8, color="#666")
+    ax.axvline(x_now, color="#333", lw=1)
+    ax.text(x_now, ymax * 1.02, " aujourd'hui", fontsize=9, va="bottom")
+    for k, lab in ((2, "x2"), (4, "x4")):
+        ax.axvline(x_now * k, color="#bbb", lw=0.8, ls=":")
+        extra = (x_now * (k - 1) * (ex or 3600)) if n_now else x_now * (k - 1) * 3600
+        ax.text(x_now * k, 0.02 * ymax, f" {lab}\n +{_hm(extra)}", fontsize=8, color="#666", va="bottom")
+    ax.set_xlim(0, xs[-1])
+    ax.set_ylim(0, ymax * 1.12)
+    ax.set_xlabel(f"nombre de {unite} (mêmes conditions de ciel)")
+    ax.set_ylabel("rapport signal / bruit")
+    ax.set_title("Ce que rapporteraient des poses en plus (le S/N grandit comme la racine du temps)", fontsize=11)
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=2, frameon=False)
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(out_png, facecolor="white")
+    plt.close(fig)
+    lignes = [f"Projection : doubler les poses (+{_hm(t)}) donne +41 % de S/N, les quadrupler (+{_hm(3 * t)}) le double ; "
+              "au-delà, chaque heure rapporte de moins en moins."]
+    for z in zones[:6]:
+        sn = float(z["sn"])
+        lignes.append(f"  {noms.get(z['nom'], z['nom'])} : S/N {sn:.1f} aujourd'hui → {sn * math.sqrt(2):.1f} avec x2, "
+                      f"{2 * sn:.1f} avec x4")
+    lignes.append("  (projection idéale : mêmes conditions de ciel ; un ciel moins bon, la Lune ou un gradient "
+                  "rapportent moins)")
+    return lignes
+
+
 class Mesure(Step):
     id, phase, optional = "S4", "Stacking", True
     title = "Mesure du stack (FWHM, S/N)"
@@ -690,6 +764,8 @@ class Mesure(Step):
             "• Carte du signal/bruit : où l'image est propre ou bruitée. Avec une zone dessinée sur une partie faible de "
             "l'objet, elle dit combien de temps de pose il faudrait en plus pour qu'elle devienne propre : utile pour "
             "décider s'il vaut la peine de refaire une nuit.\n"
+            "• Courbe de projection : ce que rapporteraient des poses en plus, zone par zone (doubler les poses donne "
+            "+41 % de qualité, les quadrupler la double).\n"
             "Sans alerte orange, il n'y a rien à corriger : valide et continue. L'étape peut aussi être passée.")
     params = [P("zones", "Zones à mesurer", "text", "",
                 help="se remplit en dessinant sur l'image ci-dessus (nom:x,y,largeur,hauteur, origine en haut à gauche)")]
@@ -707,8 +783,10 @@ class Mesure(Step):
         ctx.py("mesure_stack.py", args)
         txt = out / f"mesure_{p.T}.txt"
         lines = txt.read_text(encoding="utf-8").splitlines() if txt.exists() else []
-        imgs = [ctx.rel(f) for f in sorted(out.glob("*.png"))]
-        info = list(lines) + mesure_alertes(lines)
+        proj = out / f"projection_{p.T}.png"
+        pl = projection(out / f"mesure_{p.T}.json", proj)
+        imgs = ([ctx.rel(proj)] if proj.exists() else []) + [ctx.rel(f) for f in sorted(out.glob("mesure_*.png"))]
+        info = list(lines) + mesure_alertes(lines) + pl
         return {"outputs": {}, "info": info, "images": imgs, "extra": {"mesure": lines}}
 
     def on_validate(self, p, var):

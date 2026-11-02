@@ -129,7 +129,8 @@ try:
         pg.mouse.move(zb["x"] + zb["width"] * 0.4, zb["y"] + zb["height"] * 0.5, steps=5)
         pg.mouse.up()
         zt = pg.evaluate("() => S.edit.S4[0].zones")
-        assert zt.startswith("zone1:") and len(zt.split(":")[1].split(",")) == 4, zt
+        der = zt.split(";")[-1].strip()                      # la zone dessinée s'ajoute aux zones déjà là
+        assert der.startswith("zone") and len(der.split(":")[1].split(",")) == 4, zt
         print("  zone de mesure dessinée :", zt)
 
         # 3. cadrage : un cadre dessiné à la souris arrive dans les réglages

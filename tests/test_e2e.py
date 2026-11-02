@@ -155,7 +155,10 @@ if MULTI:
         print("  alignement S30 → S50 :", {k: det[k] for k in ("echelle", "rotation_deg", "etoiles", "rms_px", "poids_relatif")})
         assert abs(det["echelle"] - 1.625) < 0.02 and abs(abs(det["rotation_deg"]) - 3) < 0.3, det
     val("S3B", 0)
-run("S4"); val("S4")
+_, vs4 = run("S4", [{"zones": "bras:150,100,120,90"}]); val("S4")
+assert any("Projection : doubler les poses" in l for l in vs4[0]["info"]), [l for l in vs4[0]["info"] if "S/N" in l][:4]
+assert vs4[0]["images"][0].split("/")[-1].startswith("projection_"), vs4[0]["images"]
+print("  ", next(l for l in vs4[0]["info"] if l.startswith("Projection")))
 proj = ok(c.get(f"/api/projects/{NAME}"))
 rect = next(s for s in proj["steps"] if s["id"] == "P0")["dyn"]["rect"]
 print("  recadrage proposé :", rect)
