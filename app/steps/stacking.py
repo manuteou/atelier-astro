@@ -804,26 +804,30 @@ def verdict_poses(zones, t):
     def nuits(sn, cible):
         k = (cible / sn) ** 2 if sn > 0 else 99      # facteur de temps total nécessaire
         return k - 1
+    def faisab(k):
+        n = k                                         # nombre de nuits comme celle-ci
+        if n <= 1.05:
+            return "une nuit comme celle-ci, FAISABLE"
+        if n <= 4.05:
+            return f"environ {round(n)} nuits comme celle-ci, FAISABLE"
+        if n <= 10:
+            return f"environ {round(n)} nuits comme celle-ci, FAISABLE MAIS LONG"
+        return f"plus de {int(n)} nuits comme celle-ci, IRRÉALISTE"
+    x2 = (f"Une nuit de plus (+{_hm(t)}) : nébulosité moyenne {mo:.1f} → {mo * 2 ** .5:.1f}, faible {fa:.1f} → "
+          f"{fa * 2 ** .5:.1f}.")
     if fa >= 5:
-        v = (f"VERDICT : poses en plus inutiles. Même la nébulosité faible est correcte (S/N {fa:.1f}) ; le gain se "
+        v = (f"VERDICT : poses en plus INUTILES. Même la nébulosité faible est correcte (S/N {fa:.1f}) ; le gain se "
              "jouera au traitement.")
     elif fa >= 3:
-        v = (f"VERDICT : poses en plus facultatives. La nébulosité faible est déjà lisible (S/N {fa:.1f}) ; une nuit de "
-             f"plus (+{_hm(t)}) l'amènerait à {fa * 2 ** .5:.1f}, un léger mieux, surtout utile pour un étirement poussé.")
-    elif nuits(fa, 3) <= 1.05:
-        v = (f"VERDICT : une nuit de plus vaut le coup. La nébulosité faible est encore bruitée (S/N {fa:.1f}) : doubler "
-             f"le temps (+{_hm(t)}) la ferait passer à {fa * 2 ** .5:.1f}, au-dessus du seuil de lisibilité (3), et la "
-             f"nébulosité moyenne de {mo:.1f} à {mo * 2 ** .5:.1f}.")
-    elif nuits(fa, 3) <= 3.05:
-        v = (f"VERDICT : il faudrait {nuits(fa, 3) * t / 3600:.0f} h de plus (environ {nuits(fa, 3):.0f} fois le temps "
-             f"actuel) pour que la nébulosité faible (S/N {fa:.1f}) devienne lisible. Une seule nuit de plus "
-             f"(+{_hm(t)}) donnerait déjà un vrai mieux : nébulosité moyenne {mo:.1f} → {mo * 2 ** .5:.1f}, faible "
-             f"{fa:.1f} → {fa * 2 ** .5:.1f}. Sinon, traite l'image telle quelle sans trop pousser l'étirement des "
-             "franges, qui resteraient granuleuses.")
+        v = (f"VERDICT : poses en plus FACULTATIVES. La nébulosité faible est déjà lisible (S/N {fa:.1f}). " + x2 +
+             " Léger mieux, utile surtout pour un étirement poussé.")
     else:
-        v = (f"VERDICT : le temps de pose ne suffira pas pour la nébulosité faible (S/N {fa:.1f}, il faudrait plus de "
-             f"{nuits(fa, 3) * t / 3600:.0f} h en plus). Garde l'image pour sa partie moyenne (S/N {mo:.1f}) ; pour les "
-             "franges, il faut un ciel plus noir.")
+        k = nuits(fa, 3)
+        conseil = ("RECOMMANDÉES" if k <= 4.05 else "À RÉSERVER SI LA CIBLE TE TIENT À CŒUR" if k <= 10
+                   else "INEFFICACES (il faut un ciel plus noir)")
+        v = (f"VERDICT : poses en plus {conseil}. Pour rendre la nébulosité faible lisible (S/N {fa:.1f} → 3), il faut "
+             f"{_hm(k * t)} de plus, soit {faisab(k)}. " + x2 +
+             ("" if k <= 10 else f" Garde l'image pour sa partie moyenne (S/N {mo:.1f})."))
     return out + [v]
 
 

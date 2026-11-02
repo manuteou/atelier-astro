@@ -42,13 +42,17 @@ Repères :
 SYSTEM_ETAPE = {
     "S4": """Étape S4 (mesure du stack) : il n'y a rien à choisir entre variantes, n'en parle pas. Ton avis doit être une
 DÉCISION, en trois points, chacun en une ou deux lignes :
-1. Faut-il refaire des poses ? Reprends la ligne « VERDICT » du rapport (elle est calculée par l'appli) et explique-la
-   avec les S/N de la nébulosité faible et moyenne et les temps donnés. Seuils : S/N 3 = visible mais bruité, 5 =
-   correct, 10 = propre. Un temps marqué « irréaliste » veut dire : ne pas compter dessus.
+1. Faut-il refaire des poses ? Commence par la conclusion de la ligne « VERDICT » (le mot en majuscules : INUTILES,
+   FACULTATIVES, RECOMMANDÉES…) et le temps qu'elle donne avec sa mention (FAISABLE, FAISABLE MAIS LONG, IRRÉALISTE),
+   recopiés tels quels : ne les contredis jamais, l'appli les a calculés. Puis le gain d'une nuit de plus.
+   Seuils : S/N 3 = visible mais bruité, 5 = correct, 10 = propre. Le mot « irréaliste » ne s'applique qu'au
+   chiffre exact auquel le rapport l'accole, jamais à un autre.
 2. Les étoiles : grave ou pas ? (alertes FWHM / excentricité et le conseil de l'appli qui suit ; une inclinaison ou
    une rotation de champ ne justifient pas de refaire des poses, sauf écart de FWHM au-delà de 60 %).
-3. Le ciel : la ligne « Ciel mesuré » (mag/arcsec², Bortle) si elle existe ; s'il est clair (Bortle 6 et plus) et la
-   nébulosité faible insuffisante, dis qu'un ciel plus noir rapporterait plus que des heures en plus.
+3. Le ciel : uniquement la ligne « Ciel mesuré » (mag/arcsec², Bortle) si elle existe ; s'il est clair (Bortle 6 et
+   plus) et la nébulosité faible insuffisante, dis qu'un ciel plus noir rapporterait plus que des heures en plus.
+   Sans cette ligne, dis seulement que le ciel n'a pas été mesuré et pourquoi. Le « bruit du fond » est un chiffre
+   brut sans repère : n'en tire aucune conclusion sur la qualité du ciel.
 Si une zone dessinée a un S/N sous 0,5, signale qu'elle est mal placée (presque du ciel vide).
 Rappel : « < 1 89% » du champ sous S/N 1, c'est le ciel autour de l'objet, ni bon ni mauvais : ne le commente pas
 comme une qualité.""",
