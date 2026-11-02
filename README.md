@@ -57,7 +57,7 @@ Les scripts Siril générés sont gardés dans `_scripts\` : on peut toujours vo
 
 | Phase | Étapes |
 |---|---|
-| Stacking | S1 inventaire, choix des filtres (A / B / C) et des appareils · S2 conversion, `register -2pass`, tri du fond de ciel · S3 `seqapplyreg` + `stack` (mode B : deux stacks contrôlés par STACKCNT) · S3B combinaison des appareils (seulement avec plusieurs appareils ; en mode B, filtre par filtre) · S4 mesure FWHM / S/N (facultatif) |
+| Stacking | S1 inventaire, choix des filtres (A / B / C) et des appareils · S2 conversion, `register -2pass`, tri du fond de ciel · S3 `seqapplyreg` + `stack` (mode B : deux stacks contrôlés par STACKCNT) · S3B combinaison des appareils (seulement avec plusieurs appareils ; en mode B, filtre par filtre) · S4 mesure FWHM / S/N, projection et qualité du ciel en mag/arcsec² (facultatif) |
 | 1 · Linéaire | P0 recadrage (rectangle dessiné sur le stack) · P1 GraXpert · P2 SPCC + correction S50 Pro · P3 BXT · P4 NXT linéaire |
 | 2 · Étirement et étoiles | P5 étirement (autostretch, mtf calé sur le fond, autoghs, Statistical Stretch) + neutralisation par canal · P6 StarX · P6N noirs du fond sur le calque sans étoiles (facultatif) · P6B piste secondaire (mode B) · P7 étoiles (sélection étoile par étoile, puissance, garder, supprimer ; amas protégé par un clic) · P7T image naturelle |
 | 3 · Couleurs et export | P7BIS couleur des étoiles · P8B bicolore Hα / OIII (facultatif, filtre LP : chaque gaz traité à part, puis réuni avec les couleurs choisies) · P8 couleurs (satu, objet entier, doré/lave, bleu froid, rose/magenta, rouge Hα, émeraude, dégradé de deux couleurs au choix, palettes HOO et cuivre-bleu tirées du LP, régions HII du LP) + aplanissement et contraste local · P8F réglage fin en direct (température, teinte, rotation, saturation, saturation des rouges et des bleus, vibrance, luminosité, ombres et hautes lumières de la nébuleuse, contraste local, noirs ; l'aperçu change à chaque mouvement de curseur, puis application en pleine résolution ; bouton « Proposer des réglages » : curseurs placés d'après des mesures du fond, de la dominante et de la saturation, avec l'explication) · P9 fusion en écran · P10 NXT final · P11 retouches locales (éditeur : outil point vert ou anneau d'étoile, zoom à la molette, clic sur le défaut, correction visible tout de suite) · P12 export (JPEG HD/partage, TIFF 16 bits, sRGB, rotation exacte) |
@@ -238,6 +238,14 @@ séparation est moins nette : l'appli le signale.
   vers la carte de pollution lumineuse centrée sur ce lieu ; la classe saisie est retenue pour ce lieu (à 5 km près)
   et reproposée aux projets suivants. Elle figure dans la fiche technique (ligne « Ciel ») et oriente les conseils
   de filtre (en Bortle 6 et plus, le bi-bande LP porte l'essentiel du signal d'une nébuleuse).
+- **Qualité du ciel mesurée** (S4, case cochée par défaut) : photométrie de quelques poses brutes IRCUT par session
+  (8 au plus, réparties sur la nuit). Le piédestal du capteur (mot-clé `BIAS` écrit par le Seestar) est retiré, les
+  étoiles du catalogue Gaia DR3 (requête Internet, gardée en cache dans le projet) sont retrouvées sur la pose, leur
+  photométrie donne le point zéro, d'où la brillance du fond en mag/arcsec² (l'unité des SQM), ramenée au zénith,
+  et une classe de Bortle approximative (± 0,3 mag). Un graphique montre le ciel au fil de la nuit ; les poses
+  voilées (nuages, buée : le point zéro s'effondre), basses, prises au crépuscule ou Lune levée sont écartées et
+  signalées. La mesure est comparée à la classe saisie en S1 et reportée dans la fiche technique. Les poses LP
+  (bi-bande) ne se comparent pas à un SQM et ne sont pas mesurées. Hors ligne, la mesure est simplement sautée.
 - **Signature** (P12) : nom de l'objet et signature posés sur le JPEG de partage, et au choix sur les JPEG HD.
   Position, taille et opacité réglables ; la signature est retenue pour les projets suivants. Le FIT et le TIFF ne
   sont jamais signés, et les contrôles de correspondance des exports se font sur l'image vierge.

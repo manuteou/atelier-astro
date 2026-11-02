@@ -20,7 +20,8 @@ os.environ["ATELIER_ROOT"] = str(tmp / "Astrophoto")
 os.environ["ATELIER_SIRIL"] = str(HERE / "mock_siril.py")
 os.chmod(HERE / "mock_siril.py", 0o755)
 
-from tests.make_data import make, make_generic  # noqa
+from tests.make_data import catalogue, make, make_generic  # noqa
+os.environ["ATELIER_CATALOGUE"] = str(catalogue(tmp / "gaia.json"))      # qualité du ciel (S4) sans Internet
 if GENERIC:
     (tmp / "Astrophoto").mkdir(parents=True)
     make_generic(tmp / "vrac")
@@ -167,6 +168,9 @@ _, vs4 = run("S4", [{"zones": "bras:150,100,120,90"}]); val("S4")
 assert any("Projection : doubler les poses" in l for l in vs4[0]["info"]), [l for l in vs4[0]["info"] if "S/N" in l][:4]
 assert vs4[0]["images"][0].split("/")[-1].startswith("projection_"), vs4[0]["images"]
 print("  ", next(l for l in vs4[0]["info"] if l.startswith("Projection")))
+ciel_l = [l for l in vs4[0]["info"] if l.startswith(("Ciel mesuré", "Ciel non mesuré"))]
+assert ciel_l, "S4 doit dire si le ciel a pu être mesuré"
+print("  ", ciel_l[0])
 proj = ok(c.get(f"/api/projects/{NAME}"))
 rect = next(s for s in proj["steps"] if s["id"] == "P0")["dyn"]["rect"]
 print("  recadrage proposé :", rect)

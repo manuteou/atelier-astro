@@ -42,10 +42,28 @@ def render(stars, dev, H, W, rot_deg=0.0, shift=(0, 0)):
     return neb + fil, img, u
 
 
-def make(root, n_lp=8, n_ir=6, H=360, W=480, seed=1, s30=0, s30_filter="LP"):
+def catalogue(path, seed=1, ra0=314.7, dec0=44.5, dev="S50", W=480, H=360, n_etoiles=1800):
+    """Faux extrait Gaia (JSON ra, dec, g, bp_rp) des étoiles de sky() vues par make() : pour mesurer la qualité du
+    ciel sans Internet (ATELIER_CATALOGUE). Magnitude G = 10 pour un pic de 0,05."""
+    import json
+    s_raw = 206.265 * 2.9 / FOCAL[dev]
+    rows = []
+    d0 = math.radians(dec0)
+    for su, sv, f in sky(seed, n_etoiles):
+        xi, eta = math.radians((su - W / 2) * s_raw / 3600), math.radians((sv - H / 2) * s_raw / 3600)
+        rho = math.hypot(xi, eta)
+        c = math.atan(rho)
+        dec = math.asin(math.cos(c) * math.sin(d0) + (eta * math.sin(c) * math.cos(d0) / rho if rho else 0))
+        ra = ra0 + math.degrees(math.atan2(xi * math.sin(c), rho * math.cos(d0) * math.cos(c) - eta * math.sin(d0) * math.sin(c)))
+        rows.append({"ra": ra, "dec": math.degrees(dec), "g": 10 - 2.5 * math.log10(f / 0.05), "bp_rp": 0.8})
+    Path(path).write_text(json.dumps(rows))
+    return path
+
+
+def make(root, n_lp=8, n_ir=6, H=360, W=480, seed=1, s30=0, s30_filter="LP", n_etoiles=1800, bruit=0.006):
     rng = np.random.default_rng(seed)
     root = Path(root)
-    stars = sky(seed)
+    stars = sky(seed, n_etoiles)
     sessions = [("NGC7000_LP_s1", "LP", n_lp, "S50", 0.0, (0, 0)), ("NGC7000_IR_s2", "IRCUT", n_ir, "S50", 0.0, (0, 0))]
     if s30:                                             # s30_filter : "LP", "IRCUT" ou "LP+IRCUT" (les deux)
         for f30 in s30_filter.split("+"):
@@ -65,7 +83,7 @@ def make(root, n_lp=8, n_ir=6, H=360, W=480, seed=1, s30=0, s30_filter="LP"):
             for (dy, dx), cc in pat.items():
                 sig = skyb + col[cc] * neb + st * (1.0 if cc != "B" else 0.9)
                 raw[dy::2, dx::2] = sig[dy::2, dx::2]
-            raw = raw + rng.normal(0, 0.006, raw.shape)
+            raw = raw + rng.normal(0, bruit, raw.shape)
             h = fits.Header()
             h["FILTER"] = filt
             h["EXPTIME"] = 10.0
@@ -76,6 +94,7 @@ def make(root, n_lp=8, n_ir=6, H=360, W=480, seed=1, s30=0, s30_filter="LP"):
             h["SITELAT"], h["SITELONG"] = 48.85, 2.35
             h["FOCALLEN"], h["XPIXSZ"] = FOCAL[dev], 2.9
             h["OBJECT"] = "NGC 7000"
+            h["BIAS"] = 0                                   # piédestal du capteur (le Seestar l'écrit ; 0 ici)
             fits.PrimaryHDU((np.clip(raw, 0, 1) * 65535).astype(np.uint16), h).writeto(
                 d / f"Light_NGC7000_10.0s_{filt}_{i:04d}.fit", overwrite=True)
     return root

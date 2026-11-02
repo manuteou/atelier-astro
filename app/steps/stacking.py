@@ -788,6 +788,36 @@ def projection(mesure_json, out_png):
     return lignes
 
 
+def qualite_ciel(ctx, out):
+    """Mesure photométrique du ciel sur les sessions du stack (résultat mis en cache par liste de poses).
+    Retourne (lignes, résumé retenu ou None, graphique ou None)."""
+    import json
+    from .. import ciel
+    p = ctx.p
+    ses = [s for s in _sessions_for_mode(p) if ciel.mesurable(s)]
+    if not ses:
+        return ["Ciel non mesuré : pas de session IRCUT (les poses LP, filtre bi-bande, ne se comparent pas à un "
+                "SQM)."], None, None
+    cache = p.root / "cache"
+    cache.mkdir(exist_ok=True)
+    cle = [[s["path"], len(inventory.lights_of(s["path"]))] for s in ses]
+    fc = cache / "qualite_ciel.json"
+    res = None
+    try:
+        d = json.loads(fc.read_text(encoding="utf-8"))
+        res = d["res"] if d.get("cle") == cle and ciel.VERSION == d.get("version") else None
+    except (OSError, ValueError, KeyError):
+        pass
+    if res is None:
+        ctx.log("Qualité du ciel : photométrie de quelques poses par session (catalogue Gaia)…")
+        res = ciel.mesurer_sessions(ses, inventory.lights_of, cache, ctx.log)
+        if any(r.get("resume") for r in res.values()):
+            fc.write_text(json.dumps({"cle": cle, "version": ciel.VERSION, "res": res}), encoding="utf-8")
+    lignes, best = ciel.lignes(res, p.state.get("bortle"))
+    png = out / f"ciel_{p.T}.png"
+    return lignes, best, (png if ciel.graphique(res, png) else None)
+
+
 class Mesure(Step):
     id, phase, optional = "S4", "Stacking", True
     title = "Mesure du stack (FWHM, S/N)"
@@ -801,9 +831,15 @@ class Mesure(Step):
             "décider s'il vaut la peine de refaire une nuit.\n"
             "• Courbe de projection : ce que rapporteraient des poses en plus, zone par zone (doubler les poses donne "
             "+41 % de qualité, les quadrupler la double).\n"
+            "• Qualité du ciel mesurée (sessions IRCUT, Internet nécessaire pour le catalogue Gaia) : brillance du fond "
+            "en mag/arcsec², comme un SQM, et classe de Bortle approximative, avec sa courbe au fil de la nuit (éclairage "
+            "public éteint, Lune, voiles de nuages ou de buée).\n"
             "Sans alerte orange, il n'y a rien à corriger : valide et continue. L'étape peut aussi être passée.")
     params = [P("zones", "Zones à mesurer", "text", "",
-                help="se remplit en dessinant sur l'image ci-dessus (nom:x,y,largeur,hauteur, origine en haut à gauche)")]
+                help="se remplit en dessinant sur l'image ci-dessus (nom:x,y,largeur,hauteur, origine en haut à gauche)"),
+              P("ciel", "Mesurer la qualité du ciel (catalogue Gaia, Internet)", "bool", True,
+                help="photométrie de quelques poses brutes IRCUT par session : brillance du ciel en mag/arcsec² et "
+                     "classe de Bortle approximative ; les poses LP ne s'y prêtent pas (filtre bi-bande)")]
 
     def ready(self, p):
         return (p.file("stack") is not None, "pas encore de stack")
@@ -822,13 +858,30 @@ class Mesure(Step):
         pl = projection(out / f"mesure_{p.T}.json", proj)
         imgs = ([ctx.rel(proj)] if proj.exists() else []) + [ctx.rel(f) for f in sorted(out.glob("mesure_*.png"))]
         info = list(lines) + mesure_alertes(lines) + pl
-        return {"outputs": {}, "info": info, "images": imgs, "extra": {"mesure": lines}}
+        extra = {"mesure": lines}
+        if prm.get("ciel", True):
+            cl, best, png = qualite_ciel(ctx, out)
+            info += cl
+            extra["qualite_ciel"] = best
+            if png:
+                imgs.insert(1 if proj.exists() else 0, ctx.rel(png))
+        return {"outputs": {}, "info": info, "images": imgs, "extra": extra}
 
     def on_validate(self, p, var):
-        p.state["facts"]["mesure"] = var.get("extra", {}).get("mesure", [])
+        ex = var.get("extra", {})
+        p.state["facts"]["mesure"] = ex.get("mesure", [])
+        if ex.get("qualite_ciel"):
+            p.state["facts"]["qualite_ciel"] = ex["qualite_ciel"]
+        else:
+            p.state["facts"].pop("qualite_ciel", None)
 
     def notes(self, p, st):
-        return "Mesure du stack :\n" + "\n".join("  " + l for l in p.state["facts"].get("mesure", []))
+        txt = "Mesure du stack :\n" + "\n".join("  " + l for l in p.state["facts"].get("mesure", []))
+        q = p.state["facts"].get("qualite_ciel")
+        if q:
+            txt += (f"\nCiel mesuré : {q['sqm']:.1f} mag/arcsec² au zénith (≈ Bortle {q['bortle']}, "
+                    f"{q['poses']} poses)")
+        return txt
 
 
 STEPS = [Inventaire(), Alignement(), Empilement(), Mesure()]
