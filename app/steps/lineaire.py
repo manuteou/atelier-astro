@@ -331,7 +331,9 @@ class BXT(Step):
 class NXTLin(Step):
     id, phase, kind = "P4", "1 · Linéaire", "creatif"
     help = ("Débruitage sur l'image entière, étoiles comprises. 0.5 doux, 0.8 net, 0.9 fort (risque d'aspect "
-            "« plastique ») : c'est le zoom qui décide. Outil : Réglages > Outils (NoiseXTerminator, GraXpert, Siril…).")
+            "« plastique ») : c'est le zoom qui décide. Si tu comptes traiter l'Hα et l'OIII séparément (étape bicolore, "
+            "filtre LP), reste modéré (0.5 à 0.8) : l'OIII pourra être débruité à part ensuite. Outil : Réglages > Outils "
+            "(NoiseXTerminator, GraXpert, Siril…).")
     params = [P("dn", "Force", "float", 0.8, 0, 1, 0.05)]
     default_variants = [{"dn": 0.5}, {"dn": 0.8}, {"dn": 0.9}]
     preview_key = "nxt"

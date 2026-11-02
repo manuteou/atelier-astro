@@ -20,6 +20,15 @@ def galaxy_layer(p):
     return sl
 
 
+def bicolore_valide(p):
+    return p.state["steps"].get("P8B", {}).get("status") in ("done", "stale") and p.file("bicolore") is not None
+
+
+def couleur_source(p):
+    """Entrée de l'étape Couleurs : le bicolore Hα / OIII s'il a été validé, sinon le calque sans étoiles."""
+    return p.file("bicolore") if bicolore_valide(p) else galaxy_layer(p)
+
+
 def fused_preview(ctx, g_path, tag, name="apercu"):
     g, h = fitsio.read(g_path)
     s = stars_final(ctx.p)
@@ -144,10 +153,17 @@ class Couleurs(Step):
     def compose_preview(self, ctx, outputs, tag=""):
         return fused_preview(ctx, ctx.p.abs(outputs["G_final"]), tag)
 
+    def meta(self, p):
+        m = super().meta(p)
+        if bicolore_valide(p):                 # couleurs déjà posées par le bicolore : ne pas les recolorer d'office
+            m["default_variants"] = [{"methode": "aucune"}, {"methode": "satu", "satu": 0.15},
+                                     {"methode": "aucune", "contraste": True}]
+        return m
+
     def run(self, ctx, prm, tag):
         p = ctx.p
-        cur = galaxy_layer(p)
-        info = []
+        cur = couleur_source(p)
+        info = ["Entrée : bicolore Hα / OIII validé (P8B)"] if bicolore_valide(p) else []
         if prm["aplanir"]:
             o = ctx.out(tag, "plat")
             args = [cur, o, prm["part_ciel"], int(prm["sigma"]), 1]
@@ -192,7 +208,7 @@ class Couleurs(Step):
         d, _ = fitsio.read(cur)
         s = fitsio.stats(d)
         info.append(f"Médianes R/V/B : {s['medianes']} · écrêtés {s['ecretes_pct']} %")
-        info += checks.noise_change(galaxy_layer(p), cur, "après couleurs")
+        info += checks.noise_change(couleur_source(p), cur, "après couleurs")
         info = [l for l in info if not (l.startswith("OK") and ("/" in l or "\\" in l))]   # « OK <chemin> » des scripts
         return {"outputs": {"G_final": ctx.rel(cur)}, "info": info}
 
@@ -211,7 +227,7 @@ class Couleurs(Step):
         fitsio.write(o, d * (1 - k) + x * k, h)
         info.append(f"Palette {m} appliquée à {round(k * 100)} % (Hα = rouge, OIII = moyenne vert + bleu)")
         filtres = {str(s.get("filter", "")).upper() for s in p.state.get("sessions", [])}
-        if filtres and filtres != {"LP"}:
+        if p.mode == "A" and filtres and filtres != {"LP"}:                 # mode B / C (LP) : calque du LP seul
             info.append("INFO : des poses sans filtre LP (" + ", ".join(sorted(filtres - {"LP"})) + ") sont dans le stack : "
                         "le rouge et le vert/bleu n'y séparent pas Hα et OIII, la palette sera moins marquée.")
         return info

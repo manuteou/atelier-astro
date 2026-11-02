@@ -193,13 +193,36 @@ if MODE == "B" and TTYPE == "nebuleuse":
     assert p7["dyn"].get("source") == "ir", "mode B nébuleuse : étoiles IRCUT proposées par défaut"
 run("P7T"); val("P7T")
 run("P7BIS", [{"K": 1.4}, {"K": 1.8}]); val("P7BIS", 1)
+p8b = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P8B")
+if p8b["applies"]:
+    assert p8b["dyn"]["oiii_debruit"] == 0.2, p8b["dyn"]           # P4 validé à 0.8 : débruitage OIII léger proposé
+    st, vs = run("P8B", [{"palette": "perso", "c_ha": "#ff3020", "c_oiii": "#20c0ff", "oiii_debruit": 0.35},
+                         {"palette": "cuivre_bleu", "ha_contraste": 0.5}, {"palette": "hoo", "oiii_gain": 2.5},
+                         {"palette": "perso", "oiii_debruit": 0.9}])
+    for v in vs:
+        assert len(v["images"]) == 2 and any("Séparation" in l for l in v["info"]), v["info"][:3]
+    assert any("débruitage cumulé fort" in l for l in vs[3]["info"]), vs[3]["info"]
+    import numpy as np
+    from astropy.io import fits as _f
+    b = _f.getdata(str(tmp / "Astrophoto" / NAME / vs[0]["outputs"]["bicolore"])).astype(float)
+    print("  bicolore : médianes R/V/B", [round(float(np.median(b[c])), 3) for c in range(3)])
+    val("P8B", 0)
+    meta8 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P8")
+    assert meta8["default_variants"][0]["methode"] == "aucune", meta8["default_variants"]
+    BICOLORE = True
+else:
+    assert "séparables" in p8b["why"], p8b["why"]
+    print("  bicolore sans objet :", p8b["why"])
+    BICOLORE = False
 variants = [{"methode": "satu", "satu": 0.3}, {"methode": "dore", "force": 0.3},
             {"methode": "objet", "force": 0.8, "contraste": True},
             {"methode": "froid", "force": 0.4, "aplanir": True, "zone": "120,60,40,40"},
             {"methode": "degrade", "c1": "#2040ff", "c2": "#ffa040", "force": 0.6}, {"methode": "hoo", "force": 0.8}]
 if MODE == "B" and TTYPE == "galaxie":
     variants[-1] = {"methode": "hii", "force": 1.0}
-run("P8", variants); val("P8", 1)
+_, vs8 = run("P8", variants); val("P8", 1)
+if BICOLORE:
+    assert vs8[0]["info"][0].startswith("Entrée : bicolore"), vs8[0]["info"][:2]
 run("P8", [{"methode": "rose", "force": 0.5}, {"methode": "cuivre_bleu", "force": 1.0}]); val("P8", 0)
 lv = ok(c.get(f"/api/projects/{NAME}/live"))
 assert lv["base"].endswith(".jpg") and 0 <= lv["sky"] < 0.5, lv

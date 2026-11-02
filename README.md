@@ -60,7 +60,7 @@ Les scripts Siril générés sont gardés dans `_scripts\` : on peut toujours vo
 | Stacking | S1 inventaire, choix des filtres (A / B / C) et des appareils · S2 conversion, `register -2pass`, tri du fond de ciel · S3 `seqapplyreg` + `stack` (mode B : deux stacks contrôlés par STACKCNT) · S3B combinaison des appareils (seulement avec plusieurs appareils ; en mode B, filtre par filtre) · S4 mesure FWHM / S/N (facultatif) |
 | 1 · Linéaire | P0 recadrage (rectangle dessiné sur le stack) · P1 GraXpert · P2 SPCC + correction S50 Pro · P3 BXT · P4 NXT linéaire |
 | 2 · Étirement et étoiles | P5 étirement (autostretch, mtf calé sur le fond, autoghs, Statistical Stretch) + neutralisation par canal · P6 StarX · P6N noirs du fond sur le calque sans étoiles (facultatif) · P6B piste secondaire (mode B) · P7 étoiles (sélection étoile par étoile, puissance, garder, supprimer ; amas protégé par un clic) · P7T image naturelle |
-| 3 · Couleurs et export | P7BIS couleur des étoiles · P8 couleurs (satu, objet entier, doré/lave, bleu froid, rose/magenta, rouge Hα, émeraude, dégradé de deux couleurs au choix, palettes HOO et cuivre-bleu tirées du LP, régions HII du LP) + aplanissement et contraste local · P8F réglage fin en direct (température, teinte, rotation, saturation, vibrance, luminosité, noirs ; l'aperçu change à chaque mouvement de curseur, puis application en pleine résolution ; bouton « Proposer des réglages » : curseurs placés d'après des mesures du fond, de la dominante et de la saturation, avec l'explication) · P9 fusion en écran · P10 NXT final · P11 retouches locales (éditeur : outil point vert ou anneau d'étoile, zoom à la molette, clic sur le défaut, correction visible tout de suite) · P12 export (JPEG HD/partage, TIFF 16 bits, sRGB, rotation exacte) |
+| 3 · Couleurs et export | P7BIS couleur des étoiles · P8B bicolore Hα / OIII (facultatif, filtre LP : chaque gaz traité à part, puis réuni avec les couleurs choisies) · P8 couleurs (satu, objet entier, doré/lave, bleu froid, rose/magenta, rouge Hα, émeraude, dégradé de deux couleurs au choix, palettes HOO et cuivre-bleu tirées du LP, régions HII du LP) + aplanissement et contraste local · P8F réglage fin en direct (température, teinte, rotation, saturation, saturation des rouges et des bleus, vibrance, luminosité, ombres et hautes lumières de la nébuleuse, contraste local, noirs ; l'aperçu change à chaque mouvement de curseur, puis application en pleine résolution ; bouton « Proposer des réglages » : curseurs placés d'après des mesures du fond, de la dominante et de la saturation, avec l'explication) · P9 fusion en écran · P10 NXT final · P11 retouches locales (éditeur : outil point vert ou anneau d'étoile, zoom à la molette, clic sur le défaut, correction visible tout de suite) · P12 export (JPEG HD/partage, TIFF 16 bits, sRGB, rotation exacte) |
 | Fiche | P13 fiche PDF (carte du ciel, histoire, anecdote, images, fiche technique depuis le projet). Pré-remplis d'après les données : lieu (SITELAT/SITELONG des poses -> ville et région via OpenStreetMap), constellation et coordonnées, visibilité calculée pour ton lieu, phrases sur les images. Bouton « Brouillon des textes (Ollama) » : nom usuel, taille, catalogues, découverte, nom, nature, anecdote, à vérifier |
 
 Sur chaque étape : tu règles une ou plusieurs variantes (A, B, C… jusqu'à 6), **Lancer**, puis tu compares
@@ -214,6 +214,24 @@ Testés le 1er novembre 2026 sur le PC de l'auteur (RTX 5070 12 Go) :
   coupée. Sans cela, bonsai-2:27b occupait 27 Go au lieu de 8,5 Go et répondait 7 fois plus lentement ; avec la
   réflexion, plus de 8 minutes pour une fiche.
 
+## Bicolore Hα / OIII (P8B, filtre LP)
+
+Avec le filtre bi-bande (LP), l'Hα et l'OIII n'ont pas les mêmes besoins : l'OIII est plus faible et plus bruité,
+l'Hα supporte du contraste. L'étape sépare le calque sans étoiles en deux calques mono, montrés en noir et blanc sous
+chaque variante :
+- **Hα** = canal rouge ; **OIII** = moyenne du vert et du bleu, **moins la part d'Hα qui s'y mêle** (mesurée sur les
+  zones où l'Hα domine). Sans ce retrait, les deux gaz se superposent partout et deux couleurs opposées (rouge et
+  turquoise) se mélangent en gris ou blanc.
+- **Traitement de chaque gaz** : débruitage (l'OIII d'abord, avant son gain, pour ne pas grossir son bruit), gain du
+  signal au-dessus du fond, luminosité, contraste local pour l'Hα. Le fond du ciel garde son niveau.
+- **Débruitage de l'OIII adapté à P4** : la force proposée baisse quand P4 était fort (P4 à 0,8 → 0,2), et une
+  alerte signale un débruitage cumulé trop fort (risque d'aspect « plastique »).
+- **Recombinaison** : deux couleurs au choix (une par gaz), ou les palettes HOO et cuivre-bleu.
+
+Le résultat sert d'entrée à P8, qui propose alors « aucune » couleur (tu peux la passer ou y ajouter une touche).
+Sans poses LP (ou en mode C avec le large bande), l'étape est sans objet. En mode A (LP et large bande mélangés), la
+séparation est moins nette : l'appli le signale.
+
 ## Finaliser le travail
 
 Sur les pages Export (P12) et Fiche (P13), « Finaliser le travail » ouvre un récapitulatif : nom du dossier final
@@ -236,6 +254,7 @@ l'aperçu, avec ce qu'elles veulent dire. Ce sont des mesures, toujours faites d
 | P6N noirs | part des zones faibles tombées au noir, noir écrasé |
 | P7 / P9 (mode B), S3B | étoiles doublées ou décalées entre deux calques ou deux appareils |
 | P7T, P9 | `controle.py` : neutralité du fond, régularité, écrêtage, exactitude de la fusion |
+| P8B bicolore | débruitage de l'OIII sans effet, débruitage cumulé fort (P4 + OIII), pixels saturés, grain du fond qui augmente |
 | P8 couleurs | grain du fond qui augmente nettement |
 | P8F réglage fin | zones poussées au maximum, fond écrasé au noir (si le fond n'est pas protégé) |
 | P12 export | JPEG conforme à la version choisie, naturelle et colorisée non interverties, bande vide sur un bord, profil sRGB |
