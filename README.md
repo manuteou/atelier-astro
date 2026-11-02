@@ -232,6 +232,16 @@ Le résultat sert d'entrée à P8, qui propose alors « aucune » couleur (tu pe
 Sans poses LP (ou en mode C avec le large bande), l'étape est sans objet. En mode A (LP et large bande mélangés), la
 séparation est moins nette : l'appli le signale.
 
+## Ciel du lieu (Bortle) et signature
+
+- **Classe de Bortle** (S1) : le lieu est lu dans les en-têtes des poses (SITELAT / SITELONG). S1 donne un lien
+  vers la carte de pollution lumineuse centrée sur ce lieu ; la classe saisie est retenue pour ce lieu (à 5 km près)
+  et reproposée aux projets suivants. Elle figure dans la fiche technique (ligne « Ciel ») et oriente les conseils
+  de filtre (en Bortle 6 et plus, le bi-bande LP porte l'essentiel du signal d'une nébuleuse).
+- **Signature** (P12) : nom de l'objet et signature posés sur le JPEG de partage, et au choix sur les JPEG HD.
+  Position, taille et opacité réglables ; la signature est retenue pour les projets suivants. Le FIT et le TIFF ne
+  sont jamais signés, et les contrôles de correspondance des exports se font sur l'image vierge.
+
 ## Finaliser le travail
 
 Sur les pages Export (P12) et Fiche (P13), « Finaliser le travail » ouvre un récapitulatif : nom du dossier final

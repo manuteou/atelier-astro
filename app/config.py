@@ -40,6 +40,10 @@ DEFAULTS = {
     "ollama_num_ctx": 8192,
     "ollama_intent_model": "",         # modèle pour « dis ce que tu veux » (vide = le modèle par défaut)           # contexte réservé par Ollama : petit = rapide et tient dans la carte graphique
     "port": 8765,
+    # lieux d'observation : [{lat, lon, bortle}] (classe de Bortle retenue par lieu, voir sites.py)
+    "sites": [],
+    # signature posée sur les JPEG d'export (P12), retenue d'un projet à l'autre
+    "signature": "",
 }
 
 

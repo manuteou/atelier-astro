@@ -25,7 +25,12 @@ export function renderMain() {
     h("span", { class: "kind " + step.kind }, { technique: "technique", creatif: "choix de rendu", auto: "automatique", formulaire: "formulaire" }[step.kind]),
     h("span", { class: "status-line muted" }, STATUS[status] || status)));
   main.append(h("p", { class: "help" }, step.help));
-  if (step.summary?.length) main.append(h("div", { class: "banner info summary" }, step.summary.join("\n")));
+  if (step.summary?.length) {                 // les adresses web deviennent des liens (carte de pollution lumineuse…)
+    const sum = h("div", { class: "banner info summary" });
+    step.summary.join("\n").split(/(https?:\/\/\S+)/).forEach((part, i) =>
+      sum.append(i % 2 ? h("a", { href: part, target: "_blank", rel: "noopener" }, i ? "carte ↗" : part) : part));
+    main.append(sum);
+  }
 
   const stale = S.data.steps.filter(s => s.state.status === "stale").map(s => s.id);
   if (stale.length && !S.job) {

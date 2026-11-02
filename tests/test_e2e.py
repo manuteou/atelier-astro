@@ -93,7 +93,15 @@ else:
     NAME = ok(c.post("/api/projects", json={"target": "data", "type": TTYPE, "device": "S50 Pro",
                                              "sessions": [s["path"] for s in ses]}))["name"]
 
-run("S1", [{"mode": MODE}]); val("S1")
+p1 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "S1")
+assert any("lightpollutionmap.info" in l for l in p1["summary"]) or GENERIC, p1["summary"]
+_, vs1 = run("S1", [{"mode": MODE, "bortle": 7}]); val("S1")
+assert any("Bortle 7" in l for l in vs1[0]["info"]), vs1[0]["info"][:3]
+if not GENERIC:
+    assert any(int(x["bortle"]) == 7 for x in config.load().get("sites", [])), config.load().get("sites")
+    p1 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "S1")
+    assert p1["dyn"]["bortle"] == 7, p1["dyn"]
+    print("  Bortle 7 retenu pour ce lieu, proposé d'office ensuite")
 st, vs = run("S2")
 r = ok(c.post(f"/api/projects/{NAME}/steps/S2/run", json={"variants": [{"z": 4}]}))
 j = wait(r["job"])
@@ -236,7 +244,12 @@ assert "G_fin" in ok(c.get(f"/api/projects/{NAME}"))["state"]["files"]
 run("P9"); val("P9")
 run("P10", [{"dn": 0.3}]); val("P10")
 run("P11", [{"liste": "vert 200 150 20\nremplace 300 100 15"}]); val("P11")
-st12, vs12 = run("P12", [{"rotation": "90", "partage": 400}]); val("P12")
+st12, vs12 = run("P12", [{"rotation": "90", "partage": 400, "signer": "partage_hd", "titre": "NGC 7000 · test",
+                           "signature": "© Test atelier"}]); val("P12")
+assert any(l.startswith("Signé") for l in vs12[0]["info"]), vs12[0]["info"]
+assert config.load().get("signature") == "© Test atelier", "signature retenue pour les prochains projets"
+assert next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P12")["dyn"]["signature"] == "© Test atelier"
+print("  signature posée sur les JPEG, retenue pour les prochains projets")
 from PIL import Image as _Im
 _ex = ok(c.get(f"/api/projects/{NAME}"))["state"]["facts"]["exports"]
 _sz = {k: _Im.open(tmp / "Astrophoto" / NAME / v).size for k, v in _ex.items() if v.endswith(".jpg")}
@@ -324,6 +337,12 @@ print("refaites :", j["result"]["refaites"])
 assert stat["P6"] == "done" and stat["P7T"] == "done" and stat["P8"] == "stale", stat
 pdf = tmp / "Astrophoto" / NAME / vs[0]["pdf"]
 print("PDF :", pdf, pdf.stat().st_size, "octets")
+if not GENERIC:
+    from app.project import Project
+    from app.steps.export import tech_facts
+    tf = tech_facts(Project.load(tmp / "Astrophoto" / NAME))
+    assert "Bortle 7" in tf["ciel"], tf
+    print("  fiche technique, ciel :", tf["ciel"])
 # finalisation : dossier « nom - lieu - date », PDF et images gardés, dossier de travail supprimé, poses intactes
 if os.environ.get("ATELIER_SANS_FINAL"):
     print("Dossier de test :", tmp); raise SystemExit(0)

@@ -42,13 +42,26 @@ class Inventaire(Step):
           show_if={"mode": ["C"], "_deux_filtres": [True]}),
         P("principal", "Appareil principal (plusieurs appareils)", "choice", "", choices=[], show_if={"_multi": [True]},
           help="sa géométrie sert de référence : les autres stacks sont alignés et remis à son échelle"),
+        P("bortle", "Classe de Bortle du lieu", "int", 0, 0, 9, 1,
+          help="1 = ciel parfaitement noir · 4 = campagne · 6 = banlieue · 9 = centre-ville ; 0 = inconnue. Lis-la sur la "
+               "carte de pollution lumineuse (lien ci-dessus) ; elle est retenue pour ce lieu et reprise dans la fiche"),
     ]
     preview_key = "apercu"
 
     def summary(self, p):
         """Poses disponibles par appareil et par filtre, avec le temps d'intégration."""
+        from .. import sites
         ses = p.state.get("sessions", [])
         lines = pose_table(ses, {d: model(p, d) for d in {s.get("device") for s in ses}})
+        pos = sites.position(p)
+        if pos:
+            c = sites.connu(pos)
+            lines.append(f"Lieu (d'après les poses) : {pos[0]:.4f}, {pos[1]:.4f}"
+                         + (f" — classe de Bortle retenue pour ce lieu : {c['bortle']}" if c else
+                            " — classe de Bortle inconnue : lis-la sur la carte de pollution lumineuse")
+                         + f" : {sites.carte_url(pos)}")
+        else:
+            lines.append("Lieu inconnu (pas de coordonnées dans les en-têtes) : classe de Bortle à indiquer à la main si tu la connais.")
         from .. import materiel
         _, new = materiel.seen(p)
         if new:
@@ -90,7 +103,10 @@ class Inventaire(Step):
     def dyn_defaults(self, p):
         filt = {s.get("filter") for s in p.state.get("sessions", [])}
         devs = self._devs(p)
-        return {"_deux_filtres": {"LP", "IRCUT"} <= filt, "_multi": len(devs) > 1,
+        from .. import sites
+        c = sites.connu(sites.position(p))
+        b = p.state.get("bortle") or (c or {}).get("bortle") or 0
+        return {"bortle": int(b), "_deux_filtres": {"LP", "IRCUT"} <= filt, "_multi": len(devs) > 1,
                 "mode": "A" if p.type == "nebuleuse" else "C", "filtre_c": "IRCUT" if p.type == "galaxie" else "LP",
                 "principal": p.state.get("principal") if p.state.get("principal") in devs else self._best(p, devs)}
 
@@ -114,6 +130,20 @@ class Inventaire(Step):
             info.append(f"{s['name']} : {s.get('count')} poses, filtre {s.get('filter_name') or s.get('filter')} "
                         f"({'bi-bande' if s.get('filter') == 'LP' else 'large bande'}), {s.get('exptime')} s, {s.get('date')}, {s.get('instrument')} ({s.get('device')}, focale {s.get('focal')})")
         both = {"LP", "IRCUT"} <= filters
+        b = int(prm.get("bortle") or 0)
+        if b:
+            ciel = {1: "excellent", 2: "excellent", 3: "très bon", 4: "bon", 5: "moyen", 6: "pollué (banlieue)",
+                    7: "très pollué", 8: "ville", 9: "centre-ville"}[b]
+            info.append(f"Ciel : Bortle {b} ({ciel}).")
+            if b >= 6 and p.type == "nebuleuse" and "LP" not in filters:
+                info.append(f"ATTENTION : en Bortle {b}, une nébuleuse sans filtre bi-bande (LP) demande beaucoup de temps "
+                            "de pose : le filtre LP coupe l'essentiel de la pollution lumineuse.")
+            elif b >= 6 and p.type == "nebuleuse" and both:
+                info.append(f"En Bortle {b}, le bi-bande (LP) porte l'essentiel du signal de la nébuleuse : A ou B plutôt "
+                            "que C en large bande.")
+            elif b >= 7 and p.type == "galaxie":
+                info.append(f"En Bortle {b}, une galaxie demande beaucoup d'intégration en large bande (le LP ne l'aide "
+                            "presque pas) ; la courbe de projection de S4 dira ce que rapporterait une nuit de plus.")
         if not both:
             info.append("Un seul filtre présent : le choix A/B/C ne s'applique pas.")
         elif p.type == "galaxie":
@@ -155,6 +185,11 @@ class Inventaire(Step):
                 "extra": {"both": both}}
 
     def on_validate(self, p, var):
+        from .. import sites
+        b = int(var["params"].get("bortle") or 0)
+        p.state["bortle"] = b or None
+        if b:
+            sites.enregistrer(sites.position(p), b)
         both = var.get("extra", {}).get("both")
         mode = var["params"]["mode"] if both else "unique"
         p.state["mode"] = mode

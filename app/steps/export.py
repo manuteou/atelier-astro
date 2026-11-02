@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .. import checks, fitsio
+from .. import checks, fitsio, signature
 from .base import P, Step
 from .lineaire import tool
 
@@ -38,7 +38,18 @@ class Export(Step):
                                                                ["180", "180°"], ["270", "90° anti-horaire"]]),
               P("miroir", "Miroir horizontal", "bool", False),
               P("partage", "Largeur du JPEG de partage", "int", 1600, 600, 4000, 100),
-              P("tiff", "TIFF 16 bits", "bool", True)]
+              P("tiff", "TIFF 16 bits", "bool", True),
+              P("signer", "Signer l'image", "choice", "partage",
+                choices=[["non", "non"], ["partage", "JPEG de partage"], ["partage_hd", "JPEG de partage et JPEG HD"]],
+                help="le FIT et le TIFF ne sont jamais signés : ce sont tes fichiers de travail"),
+              P("titre", "Nom de l'objet", "text", "", show_if={"signer": ["partage", "partage_hd"]},
+                help="ex. « Sh2-132 · nébuleuse du Lion » ; vide = pas de nom"),
+              P("signature", "Signature", "text", "", show_if={"signer": ["partage", "partage_hd"]},
+                help="ex. « © Manu · Seestar S50 » ; retenue pour tes prochains projets"),
+              P("position", "Position", "choice", "bas_droite", choices=[list(x) for x in signature.POSITIONS],
+                show_if={"signer": ["partage", "partage_hd"]}),
+              P("taille_texte", "Taille du texte", "float", 1.0, 0.5, 2.0, 0.1, show_if={"signer": ["partage", "partage_hd"]}),
+              P("opacite", "Opacité", "float", 0.85, 0.3, 1.0, 0.05, show_if={"signer": ["partage", "partage_hd"]})]
     preview_key = "final"
 
     def compose_preview(self, ctx, outputs, tag=""):
@@ -80,7 +91,10 @@ class Export(Step):
         f_hd = unique(ex / f"{T}_FINAL_colorise_HD.jpg")
         fitsio.save_jpeg(c, f_hd, 100)
         f_sh = unique(ex / f"{T}_FINAL_partage.jpg")
-        size = fitsio.save_jpeg(c, f_sh, 88, width=min(prm["partage"], c.shape[1] - 1))
+        sig = prm.get("signer", "non") != "non" and (prm.get("titre", "").strip() or prm.get("signature", "").strip())
+        signe = (lambda img: signature.signer(img, prm.get("titre", ""), prm.get("signature", ""), prm.get("position", "bas_droite"),
+                                              prm.get("taille_texte", 1.0), prm.get("opacite", 0.85))) if sig else None
+        size = fitsio.save_jpeg(signe(c) if signe else c, f_sh, 88, width=min(prm["partage"], c.shape[1] - 1))
         files.update(fit=f_fit, colorise=f_hd, partage=f_sh)
         if prm["tiff"]:
             f_tif = unique(ex / f"{T}_FINAL.tif")
@@ -108,11 +122,30 @@ class Export(Step):
         info += checks.export_matches(f_nat, nat, fin if not same else None, rot, mir, "JPEG naturel")
         dfin, hfin = fitsio.read(fin)
         info += checks.borders_left(dfin, hfin, "l'image finale", zeros_only=True)
+        if signe:                   # après les contrôles de correspondance, faits sur l'image vierge
+            if prm["signer"] == "partage_hd":
+                fitsio.save_jpeg(signe(c), f_hd, 100)
+                fitsio.save_jpeg(signe(n), f_nat, 100)
+            info.append(f"Signé ({'JPEG de partage et HD' if prm['signer'] == 'partage_hd' else 'JPEG de partage'}) : "
+                        + " · ".join(x for x in (prm.get("titre", "").strip(), prm.get("signature", "").strip()) if x)
+                        + " ; FIT et TIFF non signés")
         rels = {k: ctx.rel(v) for k, v in files.items()}
         return {"outputs": {"final": ctx.rel(fin)}, "images": [rels["colorise"], rels["naturel"], rels["brut"]],
                 "info": info, "extra": {"exports": rels, "rotation": rot, "miroir": mir, "identiques": bool(same)}}
 
+    def dyn_defaults(self, p):
+        from .. import config
+        f = p.state.get("fiche") or {}
+        usuel = (f.get("nom_usuel") or (p.state.get("fiche_ollama") or {}).get("fields", {}).get("nom_usuel") or "").strip()
+        nom = p.state.get("target") or ""
+        return {"titre": f"{nom} · {usuel}" if usuel and usuel.lower() not in nom.lower() else nom,
+                "signature": config.load().get("signature", "")}
+
     def on_validate(self, p, var):
+        from .. import config
+        prm = var.get("params", {})
+        if prm.get("signer", "non") != "non" and prm.get("signature", "").strip():
+            config.set_value("signature", prm["signature"].strip())      # retenue pour les prochains projets
         p.state["facts"]["exports"] = var["extra"]["exports"]
         p.state["facts"]["export_orient"] = [var["extra"]["rotation"], var["extra"]["miroir"]]
 
@@ -179,6 +212,11 @@ def tech_facts(p):
         w, hh = h.get("NAXIS1"), h.get("NAXIS2")
         out["echelle"] = f"{scale:.2f}\"/pixel"
         out["champ"] = f"{w * scale / 60:.0f}' x {hh * scale / 60:.0f}'"
+    b, q = p.state.get("bortle"), f.get("qualite_ciel") or {}
+    ciel = [f"Bortle {b}" if b else ""]
+    if q.get("sqm"):
+        ciel.append(f"mesuré {q['sqm']:.1f} mag/arcsec² (≈ Bortle {q['bortle']})")
+    out["ciel"] = " · ".join(c for c in ciel if c)
     filters = sorted({s.get("filter") for s in p.state.get("sessions", []) if s.get("filter")})
     if p.mode == "C":
         filters = [p.state.get("filtre_c")]
@@ -345,8 +383,10 @@ class Fiche(Step):
                  E.fact_row([("INTÉGRATION", v(tf.get("integration"))), ("MATÉRIEL", v(tf.get("materiel")))]), Spacer(1, 6),
                  E.fact_row([("CENTRE DE L&rsquo;IMAGE (J2000)", v(tf.get("centre"))), ("CHAMP", v(tf.get("champ")))]), Spacer(1, 6),
                  E.fact_row([("ÉCHELLE", v(tf.get("echelle"))), ("LOGICIELS", v(tf.get("logiciels")))])]
-        if prm["lieu"]:
-            fiche += [Spacer(1, 6), E.fact_row([("LIEU", html.escape(prm["lieu"]))])]
+        lieu_ciel = [(k, x) for k, x in (("LIEU", html.escape(prm["lieu"]) if prm["lieu"] else ""),
+                                          ("CIEL", html.escape(tf.get("ciel") or ""))) if x]
+        if lieu_ciel:
+            fiche += [Spacer(1, 6), E.fact_row(lieu_ciel)]
         fiche.append(Spacer(1, 8))
         fiche += [Paragraph("&bull; " + e, S["Body"]) for e in steps_txt]
         story.append(KeepTogether(fiche))
