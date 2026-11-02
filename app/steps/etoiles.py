@@ -283,6 +283,11 @@ class Etoiles(Step):
           help="même nombre d'étoiles, mais une part prise parmi les plus faibles, réparties sur toute la gamme : des "
                "petites étoiles entre les grosses, comme dans un vrai champ. 0 = seulement les plus brillantes (toutes "
                "de grande taille) · 0.4 = 40 % de petites · 0.7 = surtout des petites"),
+        P("gradation", "Étagement des tailles (éclat gardé)", "float", 0.5, 0, 1, 0.05, show_if={"methode": ["selection"]},
+          help="rendu proche de la réduction par puissance sans en perdre l'éclat : chaque étoile gardée garde sa "
+               "brillance au centre, mais son pied est resserré d'autant plus qu'elle est faible ; les grosses restent "
+               "grosses, les petites deviennent des points fins. 0 = étoiles telles quelles · 0.5 = moyen (les plus "
+               "petites comme une puissance 2,5) · 1 = fort"),
         P("plancher", "Plancher", "float", 0.08, 0.01, 0.3, 0.01, show_if={"methode": ["selection"]}),
         P("pic_min", "Pic minimal", "float", 0.20, 0.05, 0.6, 0.01, show_if={"methode": ["selection"]}),
         P("halo", "Halo recousu (px)", "int", 11, 0, 25, 1, show_if={"methode": ["selection"]}),
@@ -297,9 +302,10 @@ class Etoiles(Step):
     ]
     # peu d'étoiles d'abord : sur un champ de Voie lactée, quelques centaines d'étoiles laissent la nébuleuse
     # dominer et donnent de la profondeur
-    default_variants = [{"methode": "selection", "n_ciel": 300, "n_objet": 100, "halos": 0.5},
-                        {"methode": "selection", "n_ciel": 300, "n_objet": 100, "halos": 0},
-                        {"methode": "selection", "n_ciel": 1500, "n_objet": 100, "halos": 0.5},
+    default_variants = [{"methode": "selection", "n_ciel": 300, "n_objet": 100, "halos": 0.5, "gradation": 0.5},
+                        {"methode": "selection", "n_ciel": 600, "n_objet": 100, "halos": 0.5, "gradation": 0.8,
+                         "diversite": 0.6},
+                        {"methode": "selection", "n_ciel": 1500, "n_objet": 100, "halos": 0.5, "gradation": 0.5},
                         {"methode": "puissance", "k": 2.5}]
     preview_key = "stars"
     linear = False
@@ -347,9 +353,9 @@ class Etoiles(Step):
                     raise ValueError(f"amas hors de l'image ({int(x)}, {int(y)}) : l'image fait {hdr['NAXIS1']}x{hdr['NAXIS2']} px")
                 args.append(f"{int(x)},{row},{int(r)},{int(n)}")
                 info.append(f"Amas : x {int(x)}, y {int(y)} depuis le haut = ligne FITS {row}, r {int(r)}, {int(n)} étoiles")
-            args.append(f"--diversite={prm.get('diversite', 0)}")
+            args += [f"--diversite={prm.get('diversite', 0)}", f"--gradation={prm.get('gradation', 0)}"]
             txt = ctx.py("etoiles_selection_pics.py", args)
-            info += [l for l in txt.splitlines() if l.strip()][-4:]
+            info += [l for l in txt.splitlines() if l.strip()][-6:]
             d, _ = fitsio.read(out)
             frac = float((d.max(0) > prm["plancher"]).mean() * 100)
             info.append(f"Pixels du calque au-dessus du plancher : {frac:.1f} %" +
@@ -386,7 +392,7 @@ class Etoiles(Step):
         m = prm.get("methode")
         if m == "selection":
             s = (f"Étoiles : sélection étoile par étoile, ciel {prm.get('n_ciel')}, objet {prm.get('n_objet')}, diversité des tailles "
-                 f"{prm.get('diversite', 0)}, plancher {prm.get('plancher')}, halo {prm.get('halo')}")
+                 f"{prm.get('diversite', 0)}, étagement {prm.get('gradation', 0)}, plancher {prm.get('plancher')}, halo {prm.get('halo')}")
             s += f", amas {prm['amas']}" if prm.get("amas") else ""
         elif m == "puissance":
             s = f"Étoiles : réduction pow k={prm.get('k')}"

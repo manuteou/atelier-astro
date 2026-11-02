@@ -11,6 +11,9 @@
 #  - N_objet : les N plus brillantes gardees aussi DANS la zone de l'objet (etoiles_selection.py n'y touchait jamais).
 #  - --diversite=d (0-1) : meme nombre d'etoiles, mais une part d prise a intervalles reguliers parmi les plus faibles
 #    (tailles variees, rendu plus naturel) ; 0 = seulement les plus brillantes.
+#  - --gradation=g (0-1) : rendu facon reduction par puissance, mais en gardant l'eclat : chaque etoile gardee garde son
+#    pic, son profil est resserre par (x/pic)^e, e = 1 pour la plus brillante, jusqu'a 1 + 3g pour la plus faible
+#    (g = 0.5 : comme une puissance k = 2.5 sur les petites). Les tailles s'etagent davantage ; 0 = calque intact.
 #  - reglage valide sur calque etire (NGC 281) : 0.97 0.08 0.20 0 11 (halo 7 laisse des fantomes, 11 est propre).
 # Ecrit aussi <sortie>_selection.fit.
 import sys, numpy as np, cv2
@@ -33,8 +36,22 @@ def choisir(idx, flux, N, diversite=0.0):
     return np.concatenate([top, pris]), len(pris)
 
 
+def graduer(st, bas, keep, flux, pkv, g):
+    """Resserre le profil des etoiles gardees selon leur rang de flux (log), pic conserve. Retourne (calque, e_max)."""
+    ids = np.where(keep)[0]
+    if g <= 0 or len(ids) < 2:
+        return st, 1.0
+    lf = np.log(np.maximum(flux[ids], 1e-9))
+    r = np.zeros(len(flux)); r[ids] = (lf.max() - lf) / max(lf.max() - lf.min(), 1e-9)     # 0 = la plus brillante
+    e = np.ones(len(flux)); e[ids] = 1 + 3 * float(g) * r[ids]
+    mx = st.max(0)
+    pk = np.maximum(pkv[bas], 1e-6)
+    f = np.where(keep[bas] & (bas > 0), np.clip(mx / pk, 0, 1) ** (e[bas] - 1), 1.0).astype(np.float32)
+    return st * f[None], float(e[ids].max())
+
+
 def run(stars_p, starless_p, out_p, n_ciel, n_obj, frac=0.97, plancher=0.08, pic_min=0.20, coeur=0.0, halo=7, amas=None,
-        diversite=0.0):
+        diversite=0.0, gradation=0.0):
     h = fits.open(stars_p)
     st = h[0].data.astype(np.float32)
     sl = fits.getdata(starless_p).astype(np.float32)
@@ -102,6 +119,9 @@ def run(stars_p, starless_p, out_p, n_ciel, n_obj, frac=0.97, plancher=0.08, pic
         print('amas protege (%d, %d, r=%d) : %d etoiles gardees, dont %d en plus' % (ax, ay, ar, int(inn.sum()), int((inn & ~keep).sum())))
         keep |= inn
     sel = keep[bas].astype(np.float32)
+    st, emax = graduer(st, bas, keep, flux, pkv, gradation)
+    if gradation > 0:
+        print('gradation %.2f : profils resserres de x1 (plus brillante) a puissance %.1f (plus faible), pics conserves' % (gradation, emax))
     if coeur > 0:
         rmax = np.zeros(n); rmax[keep] = coeur * (flux[keep] / np.median(flux[keep])) ** 0.25
         r = np.hypot(np.arange(W)[None, :] - cx[bas], np.arange(H)[:, None] - cy[bas])
@@ -129,4 +149,4 @@ if __name__ == '__main__':
     a = [x for x in sys.argv if not x.startswith('--')]
     f = lambda i, d: float(a[i]) if len(a) > i else d
     run(a[1], a[2], a[3], int(a[4]), int(a[5]), f(6, 0.97), f(7, 0.08), f(8, 0.20), f(9, 0.0), f(10, 7),
-        tuple(float(v) for v in a[11].split(',')) if len(a) > 11 else None, float(opts.get('diversite', 0)))
+        tuple(float(v) for v in a[11].split(',')) if len(a) > 11 else None, float(opts.get('diversite', 0)), float(opts.get('gradation', 0)))
