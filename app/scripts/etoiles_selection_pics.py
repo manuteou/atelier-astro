@@ -9,13 +9,32 @@
 #  - plancher : niveau de la zone partagee en bassins (bas = halos complets) ; pic_min : pic minimal d'une etoile ;
 #  - coeur > 0 : rayon max (px) autour du pic = coeur * (flux relatif)^0.25, au-dela le bassin est coupe (option).
 #  - N_objet : les N plus brillantes gardees aussi DANS la zone de l'objet (etoiles_selection.py n'y touchait jamais).
+#  - --diversite=d (0-1) : meme nombre d'etoiles, mais une part d prise a intervalles reguliers parmi les plus faibles
+#    (tailles variees, rendu plus naturel) ; 0 = seulement les plus brillantes.
 #  - reglage valide sur calque etire (NGC 281) : 0.97 0.08 0.20 0 11 (halo 7 laisse des fantomes, 11 est propre).
 # Ecrit aussi <sortie>_selection.fit.
 import sys, numpy as np, cv2
 from astropy.io import fits
 
 
-def run(stars_p, starless_p, out_p, n_ciel, n_obj, frac=0.97, plancher=0.08, pic_min=0.20, coeur=0.0, halo=7, amas=None):
+def choisir(idx, flux, N, diversite=0.0):
+    """Les N etoiles gardees parmi idx : les plus brillantes, et (diversite > 0) une part prise a intervalles reguliers
+    dans le classement des plus faibles. Les etoiles faibles etant bien plus nombreuses, on retrouve en miniature la
+    repartition des tailles d'un vrai champ (au lieu de seulement les plus grosses). Deterministe."""
+    order = idx[np.argsort(-flux[idx])]
+    N = min(int(N), len(order))
+    n_top = int(round(N * (1 - float(np.clip(diversite, 0, 1)))))
+    top = order[:n_top]
+    reste = order[n_top:]
+    m = N - n_top
+    if m <= 0 or len(reste) == 0:
+        return top, 0
+    pris = reste[np.unique(np.linspace(0, len(reste) - 1, m).round().astype(int))]
+    return np.concatenate([top, pris]), len(pris)
+
+
+def run(stars_p, starless_p, out_p, n_ciel, n_obj, frac=0.97, plancher=0.08, pic_min=0.20, coeur=0.0, halo=7, amas=None,
+        diversite=0.0):
     h = fits.open(stars_p)
     st = h[0].data.astype(np.float32)
     sl = fits.getdata(starless_p).astype(np.float32)
@@ -67,9 +86,11 @@ def run(stars_p, starless_p, out_p, n_ciel, n_obj, frac=0.97, plancher=0.08, pic
     keep = np.zeros(n, bool)
     for nom, z, N in (('ciel', ids & (mc < 0.01), n_ciel), ('objet', ids & (mc >= 0.01), n_obj)):
         idx = np.where(z)[0]
-        top = idx[np.argsort(-flux[idx])[:int(N)]]
+        top, n_div = choisir(idx, flux, N, diversite)
         keep[top] = True
-        print('zone %s : %d etoiles (pics), %d gardees, pic de la derniere %.3f' % (nom, len(idx), len(top), float(pkv[top].min()) if len(top) else 0.0))
+        print('zone %s : %d etoiles (pics), %d gardees%s, pic de la plus faible gardee %.3f' % (
+            nom, len(idx), len(top), (' dont %d plus petites reparties sur toute la gamme (diversite %.2f)' % (n_div, diversite)) if n_div else '',
+            float(pkv[top].min()) if len(top) else 0.0))
     if amas is not None:                         # amas protege : toutes ses etoiles (pic > pic_min) gardees en plus
         ax, ay, ar = amas[:3]
         apic = amas[3] if len(amas) > 3 else pic_min
@@ -104,7 +125,8 @@ def run(stars_p, starless_p, out_p, n_ciel, n_obj, frac=0.97, plancher=0.08, pic
 
 
 if __name__ == '__main__':
-    a = sys.argv
+    opts = {k[2:]: v for k, _, v in (x.partition('=') for x in sys.argv[1:] if x.startswith('--'))}
+    a = [x for x in sys.argv if not x.startswith('--')]
     f = lambda i, d: float(a[i]) if len(a) > i else d
     run(a[1], a[2], a[3], int(a[4]), int(a[5]), f(6, 0.97), f(7, 0.08), f(8, 0.20), f(9, 0.0), f(10, 7),
-        tuple(float(v) for v in a[11].split(',')) if len(a) > 11 else None)
+        tuple(float(v) for v in a[11].split(',')) if len(a) > 11 else None, float(opts.get('diversite', 0)))

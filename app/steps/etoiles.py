@@ -279,6 +279,10 @@ class Etoiles(Step):
           help="mode B nébuleuse : étoiles LP ou IRCUT"),
         P("n_ciel", "Étoiles gardées dans le ciel", "int", 1500, 0, 20000, 50, show_if={"methode": ["selection"]}),
         P("n_objet", "Étoiles gardées dans l'objet", "int", 100, 0, 5000, 10, show_if={"methode": ["selection"]}),
+        P("diversite", "Diversité des tailles", "float", 0.4, 0, 0.9, 0.05, show_if={"methode": ["selection"]},
+          help="même nombre d'étoiles, mais une part prise parmi les plus faibles, réparties sur toute la gamme : des "
+               "petites étoiles entre les grosses, comme dans un vrai champ. 0 = seulement les plus brillantes (toutes "
+               "de grande taille) · 0.4 = 40 % de petites · 0.7 = surtout des petites"),
         P("plancher", "Plancher", "float", 0.08, 0.01, 0.3, 0.01, show_if={"methode": ["selection"]}),
         P("pic_min", "Pic minimal", "float", 0.20, 0.05, 0.6, 0.01, show_if={"methode": ["selection"]}),
         P("halo", "Halo recousu (px)", "int", 11, 0, 25, 1, show_if={"methode": ["selection"]}),
@@ -343,6 +347,7 @@ class Etoiles(Step):
                     raise ValueError(f"amas hors de l'image ({int(x)}, {int(y)}) : l'image fait {hdr['NAXIS1']}x{hdr['NAXIS2']} px")
                 args.append(f"{int(x)},{row},{int(r)},{int(n)}")
                 info.append(f"Amas : x {int(x)}, y {int(y)} depuis le haut = ligne FITS {row}, r {int(r)}, {int(n)} étoiles")
+            args.append(f"--diversite={prm.get('diversite', 0)}")
             txt = ctx.py("etoiles_selection_pics.py", args)
             info += [l for l in txt.splitlines() if l.strip()][-4:]
             d, _ = fitsio.read(out)
@@ -380,7 +385,8 @@ class Etoiles(Step):
         prm = st.get("params", {})
         m = prm.get("methode")
         if m == "selection":
-            s = f"Étoiles : sélection étoile par étoile, ciel {prm.get('n_ciel')}, objet {prm.get('n_objet')}, plancher {prm.get('plancher')}, halo {prm.get('halo')}"
+            s = (f"Étoiles : sélection étoile par étoile, ciel {prm.get('n_ciel')}, objet {prm.get('n_objet')}, diversité des tailles "
+                 f"{prm.get('diversite', 0)}, plancher {prm.get('plancher')}, halo {prm.get('halo')}")
             s += f", amas {prm['amas']}" if prm.get("amas") else ""
         elif m == "puissance":
             s = f"Étoiles : réduction pow k={prm.get('k')}"

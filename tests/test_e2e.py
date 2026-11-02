@@ -188,6 +188,7 @@ _, vs7 = run("P7", [{"methode": "selection", "n_ciel": 150, "n_objet": 20, "amas
            {"methode": "selection", "n_ciel": 80, "n_objet": 10, "source": "ir"},
            {"methode": "garder", "halos": 0.5}]); val("P7", 0)
 assert any("Halos atténués" in l for l in vs7[4]["info"]), vs7[4]["info"]
+assert any("plus petites reparties" in l for l in vs7[0]["info"]), vs7[0]["info"]      # diversité des tailles (0.4 par défaut)
 if MODE == "B" and TTYPE == "nebuleuse":
     p7 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P7")
     assert p7["dyn"].get("source") == "ir", "mode B nébuleuse : étoiles IRCUT proposées par défaut"
