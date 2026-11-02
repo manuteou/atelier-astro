@@ -170,6 +170,11 @@ assert vs4[0]["images"][0].split("/")[-1].startswith("projection_"), vs4[0]["ima
 print("  ", next(l for l in vs4[0]["info"] if l.startswith("Projection")))
 ciel_l = [l for l in vs4[0]["info"] if l.startswith(("Ciel mesuré", "Ciel non mesuré"))]
 assert ciel_l, "S4 doit dire si le ciel a pu être mesuré"
+assert any(l.startswith("VERDICT") for l in vs4[0]["info"]), "S4 doit conclure sur l'utilité de poses en plus"
+rap = ok(c.get(f"/api/projects/{NAME}/steps/S4/report"))["text"]
+assert "VERDICT" in rap and ("Ciel mesuré" in rap or "Ciel non mesuré" in rap), "le rapport pour l'avis doit tout contenir"
+from app import report  # noqa: E402
+assert "DÉCISION" in report.system_pour("S4") and "DÉCISION" not in report.system_pour("P3")
 print("  ", ciel_l[0])
 proj = ok(c.get(f"/api/projects/{NAME}"))
 rect = next(s for s in proj["steps"] if s["id"] == "P0")["dyn"]["rect"]

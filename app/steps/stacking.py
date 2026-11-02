@@ -785,7 +785,46 @@ def projection(mesure_json, out_png):
                       f"{2 * sn:.1f} avec x4")
     lignes.append("  (projection idéale : mêmes conditions de ciel ; un ciel moins bon, la Lune ou un gradient "
                   "rapportent moins)")
+    lignes += verdict_poses(zones, t)
     return lignes
+
+
+def verdict_poses(zones, t):
+    """Conclusion tranchée sur l'utilité de poses en plus, d'après la nébulosité faible et moyenne (zones auto) et les
+    zones dessinées. Seuils de S/N : 3 = visible mais bruité, 5 = correct, 10 = propre."""
+    auto = {("faible" if "faible" in z["nom"] else "moyenne"): float(z["sn"]) for z in zones if z.get("auto")}
+    out = []
+    for z in zones:
+        if not z.get("auto") and float(z["sn"]) < 0.5:
+            out.append(f"Zone « {z['nom']} » : S/N {float(z['sn']):.1f}, c'est presque du ciel sans signal. Redessine-la sur "
+                       "une partie faible mais visible de l'objet (frange, bras), sinon sa projection n'a pas de sens.")
+    fa, mo = auto.get("faible"), auto.get("moyenne")
+    if fa is None or mo is None:
+        return out
+    def nuits(sn, cible):
+        k = (cible / sn) ** 2 if sn > 0 else 99      # facteur de temps total nécessaire
+        return k - 1
+    if fa >= 5:
+        v = (f"VERDICT : poses en plus inutiles. Même la nébulosité faible est correcte (S/N {fa:.1f}) ; le gain se "
+             "jouera au traitement.")
+    elif fa >= 3:
+        v = (f"VERDICT : poses en plus facultatives. La nébulosité faible est déjà lisible (S/N {fa:.1f}) ; une nuit de "
+             f"plus (+{_hm(t)}) l'amènerait à {fa * 2 ** .5:.1f}, un léger mieux, surtout utile pour un étirement poussé.")
+    elif nuits(fa, 3) <= 1.05:
+        v = (f"VERDICT : une nuit de plus vaut le coup. La nébulosité faible est encore bruitée (S/N {fa:.1f}) : doubler "
+             f"le temps (+{_hm(t)}) la ferait passer à {fa * 2 ** .5:.1f}, au-dessus du seuil de lisibilité (3), et la "
+             f"nébulosité moyenne de {mo:.1f} à {mo * 2 ** .5:.1f}.")
+    elif nuits(fa, 3) <= 3.05:
+        v = (f"VERDICT : il faudrait {nuits(fa, 3) * t / 3600:.0f} h de plus (environ {nuits(fa, 3):.0f} fois le temps "
+             f"actuel) pour que la nébulosité faible (S/N {fa:.1f}) devienne lisible. Une seule nuit de plus "
+             f"(+{_hm(t)}) donnerait déjà un vrai mieux : nébulosité moyenne {mo:.1f} → {mo * 2 ** .5:.1f}, faible "
+             f"{fa:.1f} → {fa * 2 ** .5:.1f}. Sinon, traite l'image telle quelle sans trop pousser l'étirement des "
+             "franges, qui resteraient granuleuses.")
+    else:
+        v = (f"VERDICT : le temps de pose ne suffira pas pour la nébulosité faible (S/N {fa:.1f}, il faudrait plus de "
+             f"{nuits(fa, 3) * t / 3600:.0f} h en plus). Garde l'image pour sa partie moyenne (S/N {mo:.1f}) ; pour les "
+             "franges, il faut un ciel plus noir.")
+    return out + [v]
 
 
 def qualite_ciel(ctx, out):

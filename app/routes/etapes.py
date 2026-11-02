@@ -92,7 +92,7 @@ def step_advice(name: str, sid: str, data: dict = Body(default={})):
 
     def work(job):
         job.write(f"Avis demandé à {model} (Ollama) sur {sid} : {len(text)} caractères de rapport")
-        ans = report.ollama_advice(cfg["ollama_url"], model, text)
+        ans = report.ollama_advice(cfg["ollama_url"], model, text, sid=sid)
         if not ans:
             raise RuntimeError(f"{model} a renvoyé une réponse vide : réessayer, ou choisir un autre modèle dans Réglages")
         job.write("Avis reçu ; modèle déchargé de la carte graphique.")

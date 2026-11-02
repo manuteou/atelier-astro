@@ -38,6 +38,23 @@ Repères :
 """
 
 
+# consignes propres à une étape (ajoutées au message système)
+SYSTEM_ETAPE = {
+    "S4": """Étape S4 (mesure du stack) : il n'y a rien à choisir entre variantes, n'en parle pas. Ton avis doit être une
+DÉCISION, en trois points, chacun en une ou deux lignes :
+1. Faut-il refaire des poses ? Reprends la ligne « VERDICT » du rapport (elle est calculée par l'appli) et explique-la
+   avec les S/N de la nébulosité faible et moyenne et les temps donnés. Seuils : S/N 3 = visible mais bruité, 5 =
+   correct, 10 = propre. Un temps marqué « irréaliste » veut dire : ne pas compter dessus.
+2. Les étoiles : grave ou pas ? (alertes FWHM / excentricité et le conseil de l'appli qui suit ; une inclinaison ou
+   une rotation de champ ne justifient pas de refaire des poses, sauf écart de FWHM au-delà de 60 %).
+3. Le ciel : la ligne « Ciel mesuré » (mag/arcsec², Bortle) si elle existe ; s'il est clair (Bortle 6 et plus) et la
+   nébulosité faible insuffisante, dis qu'un ciel plus noir rapporterait plus que des heures en plus.
+Si une zone dessinée a un S/N sous 0,5, signale qu'elle est mal placée (presque du ciel vide).
+Rappel : « < 1 89% » du champ sous S/N 1, c'est le ciel autour de l'objet, ni bon ni mauvais : ne le commente pas
+comme une qualité.""",
+}
+
+
 def _model(p, d):
     from .steps.stacking import model
     try:
@@ -77,7 +94,7 @@ def build(p, sid):
             L.append(f"  mesures : médianes R/V/B {s['medianes']}, zéros {s['zeros_pct']} %, écrêtés {s['ecretes_pct']} %, "
                      f"taille {s['taille'][0]}x{s['taille'][1]}")
         from .remedies import remedy
-        for line in v.get("info", [])[:25]:
+        for line in v.get("info", [])[:60]:
             L.append(f"  {line}")
             if line.startswith("ATTENTION"):
                 rm = remedy(p, sid, line)
@@ -124,6 +141,10 @@ def ollama_chat(url, model, messages, fmt=None, timeout=600):
             raise RuntimeError(f"Ollama injoignable ({e.reason}) : est-il lancé ?")
 
 
-def ollama_advice(url, model, text, timeout=600):
-    return ollama_chat(url, model, [{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}],
+def system_pour(sid=None):
+    return SYSTEM + ("\n" + SYSTEM_ETAPE[sid] if sid in SYSTEM_ETAPE else "")
+
+
+def ollama_advice(url, model, text, timeout=600, sid=None):
+    return ollama_chat(url, model, [{"role": "system", "content": system_pour(sid)}, {"role": "user", "content": text}],
                        timeout=timeout)
