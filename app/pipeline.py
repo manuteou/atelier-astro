@@ -16,8 +16,10 @@ def step_meta(p, sid):
     m["dyn"] = s.dyn_defaults(p) if hasattr(s, "dyn_defaults") and m["applies"] else {}
     m["reference"] = s.reference_for(p) if hasattr(s, "reference_for") else getattr(s, "reference_step", None)
     m["summary"] = s.summary(p) if hasattr(s, "summary") else None
-    from .intentions import phrases
+    from .intentions import AVIS_UTILE, objectifs, phrases
     m["phrases"] = phrases(sid)
+    m["objectifs"] = objectifs(sid)
+    m["avis"] = sid in AVIS_UTILE
     if hasattr(s, "poses") and m["applies"]:
         try:
             m["poses"] = s.poses(p)

@@ -187,14 +187,20 @@ premier projet réel, regarde en particulier :
 Les étapes déjà marquées « non validées » dans le plugin le restent ici : mode B, `combiner_filtres.py`,
 DBXtract (absent de l'appli), étoile marquante (absente).
 
-## « Dis ce que tu veux » (étapes de rendu)
+## Réglages par choix à cliquer (et Ollama, sans texte libre)
 
-Sur les étapes de rendu (netteté, débruitage, étirement, noirs, étoiles, couleurs, réglage fin), des **phrases toutes
-faites** (« Fond plus noir », « Moins d'étoiles », « Plus chaud »…) changent les réglages d'un pas connu, sans modèle,
-instantanément ; et une case accepte une **phrase libre**, traduite en réglages par Ollama (gemma4 par défaut s'il est
-installé, réglable : `ollama_intent_model`). Les réglages proposés sont contrôlés (réglages connus, affichés, dans
-leurs bornes) ; rien n'est lancé, la page dit ce qui a changé. Test du 1er novembre 2026 sur 16 phrases réelles :
-gemma4 14 justes (2 s), qwen2.5:7b 12, qwen3:4b 6. Les phrases toutes faites sont dans `app/intentions.py`.
+- **Réglages rapides** (étapes de rendu) : des phrases toutes faites (« Fond plus noir », « Moins d'étoiles », « Plus
+  chaud »…) changent les réglages d'un pas connu, sans modèle, instantanément.
+- **Meilleurs réglages par Ollama pour…** : des objectifs à cliquer (« Les réglages les plus sains d'après les
+  mesures », puis les mêmes objectifs que les réglages rapides) ; le modèle lit les mesures de la dernière série de
+  variantes et propose les réglages. En S3 : « Quelles poses écarter ? », il choisit parmi les poses signalées par
+  le tri, jamais d'autres. Modèle : gemma4 par défaut s'il est installé (réglable : `ollama_intent_model`).
+- **Avis local (Ollama)** : seulement aux étapes où les chiffres aident à choisir (S3, S3B, S4, P3, P4, P5, P6H, P6N,
+  P7, P7BIS, P8, P8F, P10).
+- **Pas de texte libre** : la demande au modèle est toujours écrite par l'appli à partir d'une liste fermée ; le
+  rapport qu'il reçoit est débarrassé des champs saisis (titre, signature, noms) et nettoyé. Une consigne glissée
+  dans un champ ne peut donc pas le détourner. Ses réponses sont contrôlées (réglages connus, affichés, dans leurs
+  bornes) ; rien n'est lancé, la page dit ce qui a changé.
 
 ## Modèles locaux (Ollama) : ce qu'ils valent
 

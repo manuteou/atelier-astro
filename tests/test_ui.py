@@ -90,7 +90,7 @@ try:
         pg.evaluate("() => document.querySelector('#viewer').classList.add('hidden')")
         print(f"  choix des poses : {ex0!r} -> {ex1!r} -> {ex2!r}, image ouverte sur demande")
 
-        # 2c. « dis ce que tu veux » : une phrase toute faite change les réglages sans rien lancer
+        # 2c. réglages rapides : une phrase toute faite change les réglages sans rien lancer ; pas de champ de texte libre
         pg.evaluate("() => { S.sid = 'P6N'; S.edit = {}; renderSteps(); renderMain(); }")
         pg.wait_for_selector(".intent .chip")
         before = pg.evaluate("() => S.edit.P6N.map(v => v.niveau)")
@@ -98,6 +98,7 @@ try:
         after = pg.evaluate("() => S.edit.P6N.map(v => v.niveau)")
         assert all(a == b - 3 for a, b in zip(after, before)), (before, after)
         assert "Niveau" in pg.inner_text(".intent-msg")
+        assert pg.locator(".intent input[type=text]").count() == 0, "aucun texte libre envoyé au modèle"
         print(f"  phrases toutes faites : niveau {before} -> {after}")
 
         # 2d. P7 : amas protégé dessiné à la souris

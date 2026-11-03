@@ -37,6 +37,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 
 import numpy as np
@@ -561,6 +562,7 @@ def main():
         try:
             nom, coords = z.split(":")
             x, y, w, h = (int(v) for v in coords.split(","))
+            nom = re.sub(r"[^\w \-]", "", nom).strip()[:24] or "zone"      # un nom, pas un texte libre
         except ValueError:
             sys.exit(f"Zone mal écrite : {z!r} (attendu nom:x,y,w,h)")
         bloc = sn[max(y, 0):y + h, max(x, 0):x + w]

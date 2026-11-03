@@ -1,6 +1,6 @@
-// « Dis ce que tu veux » : phrases toutes faites par étape (changement de réglages fixe, sans modèle) et phrase
-// libre traduite en réglages par Ollama (contrôlés côté serveur). Rien n'est lancé : les réglages changent, on regarde,
-// on lance.
+// Réglages par choix à cliquer : « réglages rapides » (changement fixe, sans modèle) et « meilleurs réglages par
+// Ollama » pour un objectif choisi dans une liste (le modèle lit les mesures de l'étape ; résultat contrôlé côté serveur).
+// Aucun texte libre : rien de ce qu'on tape ne part au modèle. Rien n'est lancé : les réglages changent, on regarde, on lance.
 import { h, S, api, toast } from "../core.js";
 import { initEditor, visible } from "../editeur.js";
 import { renderMain } from "../page.js";
@@ -33,8 +33,8 @@ export function applyChanges(step, changes) {
 }
 
 export function intentBar(step) {
-  // seulement pour les choix de rendu : une étape qui mesure (S4) ou purement technique n'a rien à « régler au goût »
-  if (!step.phrases?.length && (!S.ollama.ok || step.kind !== "creatif")) return null;
+  const objs = S.ollama.ok ? (step.objectifs || []) : [];
+  if (!step.phrases?.length && !objs.length) return null;
   const msg = h("div", { class: "hint intent-msg" });
   const show = (title, lines, extra) => {
     S.intentMsg = { step: step.id, title, lines, extra };
@@ -42,24 +42,29 @@ export function intentBar(step) {
   };
   const chip = (ph) => h("button", { class: "chip", title: Object.entries(ph.reglages).map(([k, v]) => `${k} ${v}`).join(", "),
     onclick: () => { const l = applyChanges(step, ph.reglages); show(`« ${ph.texte} »`, l); } }, ph.texte);
-  const input = h("input", { type: "text", placeholder: S.ollama.ok ? "ou dis-le avec tes mots, ex. « le ciel un peu plus noir sans perdre les volutes »" : "Ollama non détecté : phrases toutes faites seulement", disabled: !S.ollama.ok });
-  const go = h("button", { class: "small", disabled: !S.ollama.ok, onclick: async () => {
-    const text = input.value.trim();
-    if (!text) return;
-    go.disabled = true; go.textContent = "…";
-    try {
-      const r = await api("POST", `/api/projects/${S.project}/steps/${step.id}/intention`, { text, vals: initEditor(step)[0] });
-      const l = applyChanges(step, r.reglages);
-      show(`« ${text} » (${r.modele})`, l, (r.explication || "") + (r.refuses?.length ? ` — ignoré : ${r.refuses.join(", ")}` : ""));
-    } catch (e) { toast(e.message, true); go.disabled = false; go.textContent = "Appliquer"; }
-  } }, "Appliquer");
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") go.click(); });
+  const sansMesure = !(step.state?.variants || []).length;
+  const objChip = (o) => {
+    const b = h("button", { class: "chip ollama", title: "Ollama propose les meilleurs réglages pour cet objectif, d'après les mesures de la dernière série de variantes",
+      disabled: !!S.job, onclick: async () => {
+        b.disabled = true; const t0 = b.textContent; b.textContent = "… " + t0;
+        try {
+          const r = await api("POST", `/api/projects/${S.project}/steps/${step.id}/intention`, { objectif: o.cle, vals: initEditor(step)[0] });
+          const l = applyChanges(step, r.reglages);
+          show(`« ${r.objectif} » (${r.modele})`, l, (r.explication || "") + (r.refuses?.length ? ` — ignoré : ${r.refuses.join(", ")}` : ""));
+        } catch (e) { toast(e.message, true); b.disabled = false; b.textContent = t0; }
+      } }, o.texte);
+    return b;
+  };
   const m = S.intentMsg?.step === step.id ? S.intentMsg : null;
   if (m) {
     msg.append(h("b", {}, m.title + " : "), m.lines.length ? m.lines.join(" · ") : "aucun réglage à changer pour la méthode choisie",
       m.extra ? h("div", { class: "muted" }, m.extra) : null,
       m.lines.length ? h("div", { class: "muted" }, "Rien n'est lancé : regarde les réglages, puis « Lancer ».") : null);
   }
-  return h("div", { class: "intent" }, h("div", { class: "intent-row" }, h("span", { class: "intent-lab" }, "Dis ce que tu veux :"),
-    (step.phrases || []).map(chip)), h("div", { class: "intent-row" }, input, go), m ? msg : null);
+  return h("div", { class: "intent" },
+    step.phrases?.length ? h("div", { class: "intent-row" }, h("span", { class: "intent-lab" }, "Réglages rapides :"), step.phrases.map(chip)) : null,
+    objs.length ? h("div", { class: "intent-row" }, h("span", { class: "intent-lab" }, `Meilleurs réglages par ${S.ollama.model || "Ollama"} pour :`),
+      objs.map(objChip),
+      sansMesure && step.id !== "S3" ? h("span", { class: "muted small" }, " (lance d'abord une série de variantes : il s'appuiera sur leurs mesures)") : null) : null,
+    m ? msg : null);
 }

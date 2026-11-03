@@ -302,3 +302,5 @@ button.danger:disabled { opacity: .45; }
 .ex-lb-body { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 10px; }
 .ex-lb-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
 @media (max-width: 700px) { .explorer { padding: 0 16px 40px; } .ex-bar input[type=search] { width: 140px; } .ex-images img { height: 140px; } }
+.chip.ollama { border-color: #3a2f73; color: #c9bcff; }
+.chip.ollama:disabled { opacity: .5; }

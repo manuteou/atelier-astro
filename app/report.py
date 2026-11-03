@@ -67,7 +67,16 @@ def _model(p, d):
         return str(d)
 
 
-def build(p, sid):
+def _propre(t, n=300):
+    """Texte venu de l'utilisateur ou d'un fichier, rendu inoffensif pour le modèle : une ligne, sans guillemets ni
+    balises, tronqué."""
+    import re
+    return re.sub(r"[`\"<>{}\[\]]", "", re.sub(r"\s+", " ", str(t)))[:n]
+
+
+def build(p, sid, pour_modele=False):
+    """Rapport chiffré de l'étape. pour_modele : sans les champs de texte libre (titre, signature, noms…), lignes
+    nettoyées, pour qu'aucun texte saisi ne puisse se glisser comme une consigne dans la demande au modèle local."""
     step = STEP_MAP[sid]
     st = p.state["steps"].get(sid, {})
     L = [f"Projet : {p.state['target']} ({p.type}), appareil(s) : " +
@@ -89,6 +98,9 @@ def build(p, sid):
         L.append("(aucune variante lancée pour cette étape)")
     for v in variants:
         prm = step.visible(v.get("params") or {})
+        if pour_modele:
+            libres = {q.name for q in step.params if q.type in ("text", "textarea")}
+            prm = {k: x for k, x in prm.items() if k not in libres}
         L.append(f"Variante {v.get('tag')} : " + ", ".join(f"{k}={str(x).replace(chr(10), ' ; ')}" for k, x in prm.items()))
         if v.get("error"):
             L.append(f"  ÉCHEC : {v['error']}")
@@ -99,7 +111,7 @@ def build(p, sid):
                      f"taille {s['taille'][0]}x{s['taille'][1]}")
         from .remedies import remedy
         for line in v.get("info", [])[:60]:
-            L.append(f"  {line}")
+            L.append(f"  {_propre(line) if pour_modele else line}")
             if line.startswith("ATTENTION"):
                 rm = remedy(p, sid, line)
                 L.append(f"    → conseil de l'appli : {rm['conseil']}" + (f" [{rm['etape']}]" if rm["etape"] else ""))

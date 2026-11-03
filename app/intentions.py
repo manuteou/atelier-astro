@@ -1,10 +1,14 @@
-"""Piloter les réglages d'une étape avec des phrases.
+"""Piloter les réglages d'une étape par des choix à cliquer (jamais de texte libre : pas d'injection possible dans
+la demande faite au modèle local).
 
 - PHRASES : phrases toutes faites par étape, chacune liée à un changement de réglages connu (aucun modèle, instantané).
   Valeur « +0.1 » / « -3 » : ajustement relatif à la valeur actuelle ; autre valeur : valeur imposée. Les réglages
   d'une autre méthode que celle choisie sont ignorés à l'application (seuls les champs affichés changent).
-- traduire() : une phrase libre -> réglages, par un modèle Ollama qui connaît les réglages de l'étape, leurs bornes et
-  les phrases toutes faites (exemples). Le résultat est contrôlé : réglages inconnus retirés, bornes respectées.
+- OBJECTIFS : objectifs à cliquer pour lesquels Ollama propose les meilleurs réglages, d'après les mesures de la
+  dernière série de variantes (rapport chiffré) ; la demande est écrite par l'appli, le résultat est contrôlé
+  (réglages connus, affichés, dans leurs bornes). En S3, il propose les poses à écarter, parmi celles que le tri a
+  signalées seulement.
+- AVIS_UTILE : étapes où l'avis du modèle sur les chiffres aide à choisir (ailleurs, le bouton n'apparaît pas).
 """
 import json
 import re
@@ -45,6 +49,28 @@ PHRASES = {
     "P10": [("Moins de grain", {"dn": "+0.1"}),
             ("Plus naturel, moins lissé", {"dn": "-0.15"})],
 }
+
+
+AVIS_UTILE = {"S3", "S3B", "S4", "P3", "P4", "P5", "P6H", "P6N", "P7", "P7BIS", "P8", "P8F", "P10"}
+
+SAIN = ("sain", "Les réglages les plus sains d'après les mesures")
+
+
+def objectifs(sid):
+    """Objectifs à cliquer pour « meilleurs réglages par Ollama » (aucun hors des étapes utiles)."""
+    if sid not in AVIS_UTILE or sid == "S4":
+        return []
+    if sid == "S3":
+        return [{"cle": "poses", "texte": "Quelles poses écarter ?"}]
+    return [{"cle": SAIN[0], "texte": SAIN[1]}] + [{"cle": f"p{i}", "texte": t} for i, (t, _) in enumerate(PHRASES.get(sid, []))]
+
+
+def objectif_texte(sid, cle):
+    """Texte de l'objectif choisi (écrit par l'appli) ; ValueError pour une clé inconnue."""
+    for o in objectifs(sid):
+        if o["cle"] == cle:
+            return o["texte"]
+    raise ValueError("objectif inconnu pour cette étape")
 
 
 def phrases(sid):
@@ -126,15 +152,18 @@ def clean(step, vals, changes):
     return ok, refus
 
 
-def prompt(step, vals, text):
+def prompt(step, vals, objectif, rapport=""):
     sch = schema(step, vals)
     names = {d["nom"] for d in sch}
     ex = "\n".join(f"- « {t} » -> {json.dumps({k: v for k, v in r.items() if k in names}, ensure_ascii=False)}"
                    for t, r in PHRASES.get(step.id, []) if any(k in names for k in r))
     return (f"Étape : {step.id} · {step.title}\n{step.help}\n\nRéglages :\n"
             + json.dumps(sch, ensure_ascii=False, indent=1)
-            + (f"\n\nExemples de demandes et de réglages pour cette étape :\n{ex}" if ex else "")
-            + f"\n\nDemande de l'utilisateur : « {text} »")
+            + (f"\n\nExemples d'objectifs et de réglages pour cette étape :\n{ex}" if ex else "")
+            + (f"\n\nMesures de la dernière série de variantes (rapport de l'appli) :\n{rapport}" if rapport else
+               "\n\nAucune variante lancée : pas encore de mesures, appuie-toi sur les réglages actuels.")
+            + f"\n\nObjectif choisi par l'utilisateur : « {objectif} ». Donne les meilleurs réglages pour l'atteindre "
+              "d'après les mesures (si une variante y répond déjà, reprends ses réglages).")
 
 
 def choose_model(cfg, installed):
@@ -146,11 +175,52 @@ def choose_model(cfg, installed):
     return g or cfg.get("ollama_model") or ((installed or [""])[0])
 
 
-def traduire(url, model, step, vals, text, timeout=180):
+def traduire(url, model, step, vals, objectif, rapport="", timeout=180):
     from .report import ollama_chat
-    txt = ollama_chat(url, model, [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt(step, vals, text)}],
+    txt = ollama_chat(url, model, [{"role": "system", "content": SYSTEM},
+                                   {"role": "user", "content": prompt(step, vals, objectif, rapport)}],
                       fmt="json", timeout=timeout)
     m = re.search(r"\{.*\}", txt, re.S)
     d = json.loads(m.group(0)) if m else {}
     reglages, refus = clean(step, vals, d.get("reglages") or {})
-    return {"reglages": reglages, "explication": str(d.get("explication") or "").strip(), "refuses": refus}
+    return {"reglages": reglages, "explication": str(d.get("explication") or "").strip()[:400], "refuses": refus}
+
+
+SYSTEM_POSES = """Tu aides un astrophotographe amateur à choisir les poses à écarter avant l'empilement.
+On te donne les poses signalées par le tri automatique (numéro, niveau « nette » / « mitigée » / « limite », raison,
+fond relatif, part des étoiles habituelles). Règles : écarte toujours les « nettes » ; pour les « mitigées », écarte
+celles dont la raison est un voile, le crépuscule ou un fond nettement plus clair (x1.3 et plus) ; garde les
+« limites » sauf raison grave. Plus de poses = moins de bruit : n'écarte pas sans raison.
+Réponds UNIQUEMENT par un objet JSON : {"exclure": [numéros], "explication": "deux phrases au plus"}."""
+
+
+def poses_a_ecarter(url, model, lignes, key, timeout=180):
+    """lignes : poses signalées (dict avec key = numéro). Le modèle ne peut choisir que parmi elles."""
+    from .report import ollama_chat
+    permis = {}
+    desc = []
+    for r in lignes:
+        try:
+            n = int(r[key])
+        except (KeyError, TypeError, ValueError):
+            continue
+        permis[n] = r
+        desc.append(f"- pose {n} : {r.get('niveau', '?')}, {re.sub(r'[^\w %.,:;()<>x+-]', '', str(r.get('raison') or ''))[:160]}"
+                    f" ; fond x{r.get('rapport', '?')} ; étoiles {r.get('etoiles_pct', '?')} %")
+    if not desc:
+        return {"reglages": {}, "explication": "Aucune pose signalée par le tri : rien à écarter.", "refuses": []}
+    txt = ollama_chat(url, model, [{"role": "system", "content": SYSTEM_POSES},
+                                   {"role": "user", "content": "Poses signalées :\n" + "\n".join(desc)}],
+                      fmt="json", timeout=timeout)
+    m = re.search(r"\{.*\}", txt, re.S)
+    d = json.loads(m.group(0)) if m else {}
+    choix, refus = [], []
+    for v in d.get("exclure") or []:
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            refus.append(str(v))
+            continue
+        (choix if n in permis else refus).append(n)
+    return {"choix": sorted(set(choix)), "explication": str(d.get("explication") or "").strip()[:400],
+            "refuses": [str(x) for x in refus]}

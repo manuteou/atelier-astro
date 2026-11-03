@@ -89,7 +89,7 @@ export function renderMain() {
     actions.append(h("button", { class: "ghost", title: "Rideau avant/après entre la référence et les variantes, zoom identique des deux côtés", onclick: () => dlgCompare(step) }, "Comparer"));
   if (st.variants?.length) {
     actions.append(h("button", { class: "ghost", title: "Copie les réglages, mesures et alertes de cette étape : à coller dans la conversation avec Claude", onclick: () => copyReport(step) }, "Copier le rapport"));
-    if (S.ollama.ok) actions.append(h("button", { class: "ghost", disabled: !!S.job, title: `Avis d'un modèle local (${S.ollama.model}) sur les chiffres de l'étape — il ne voit pas les images`, onclick: () => askOllama(step) }, "Avis local (Ollama)"));
+    if (S.ollama.ok && step.avis) actions.append(h("button", { class: "ghost", disabled: !!S.job, title: `Avis d'un modèle local (${S.ollama.model}) sur les chiffres de l'étape — il ne voit pas les images`, onclick: () => askOllama(step) }, "Avis local (Ollama)"));
   }
   if (S.data.state.zoom) actions.append(h("span", { class: "muted mono" }, "zoom : " + S.data.state.zoom.join(" ")));
   main.append(actions);

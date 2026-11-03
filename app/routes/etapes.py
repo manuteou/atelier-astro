@@ -88,7 +88,10 @@ def step_advice(name: str, sid: str, data: dict = Body(default={})):
     model = data.get("model") or cfg.get("ollama_model") or (report.ollama_models(cfg["ollama_url"]) or [""])[0]
     if not model:
         raise ValueError("aucun modèle Ollama installé (ex. : ollama pull qwen2.5:7b)")
-    text = report.build(proj(name), sid)
+    from ..intentions import AVIS_UTILE
+    if sid not in AVIS_UTILE:
+        raise ValueError("l'avis du modèle local n'est pas proposé pour cette étape")
+    text = report.build(proj(name), sid, pour_modele=True)
 
     def work(job):
         job.write(f"Avis demandé à {model} (Ollama) sur {sid} : {len(text)} caractères de rapport")
@@ -160,19 +163,36 @@ def pose_thumb(name: str, fichier: int, dev: str = ""):
 
 @router.post("/api/projects/{name}/steps/{sid}/intention")
 def intention(name: str, sid: str, data: dict = Body(...)):
-    """Phrase libre -> réglages de l'étape (modèle Ollama), contrôlés : réglages connus, affichés, dans leurs bornes."""
+    """Objectif cliqué -> meilleurs réglages proposés par Ollama d'après les mesures de l'étape. Pas de texte libre :
+    la demande est écrite par l'appli à partir d'une liste fermée ; le résultat est contrôlé (réglages connus,
+    affichés, dans leurs bornes ; en S3, poses choisies parmi celles que le tri a signalées)."""
     from .. import intentions, report
     if sid not in STEP_MAP:
         raise HTTPException(404, "étape inconnue")
-    text = str(data.get("text") or "").strip()
-    if not text:
-        raise ValueError("phrase vide")
+    objectif = intentions.objectif_texte(sid, str(data.get("objectif") or ""))
     cfg = config.load()
     model = intentions.choose_model(cfg, report.ollama_models(cfg["ollama_url"]))
     if not model:
-        raise ValueError("Ollama n'est pas disponible : utilise les phrases toutes faites, ou lance Ollama")
+        raise ValueError("Ollama n'est pas disponible : utilise les réglages rapides, ou lance Ollama")
+    p = proj(name)
     step = STEP_MAP[sid]
-    vals = {**step.defaults(), **{k: v for k, v in (data.get("vals") or {}).items()}}
-    out = intentions.traduire(cfg["ollama_url"], model, step, vals, text)
-    out["modele"] = model
+    if sid == "S3":
+        groupes = step.poses(p) if hasattr(step, "poses") else []
+        parts, expl, refus = [], [], []
+        for g in groupes:
+            r = intentions.poses_a_ecarter(cfg["ollama_url"], model, g.get("poses") or [], g.get("key") or "index_seq_1")
+            parts.append((g.get("dev") or "", r.get("choix", [])))
+            if r.get("explication"):
+                expl.append((f"{g['dev']} : " if g.get("dev") else "") + r["explication"])
+            refus += r.get("refuses", [])
+        if len(parts) == 1 and not parts[0][0]:
+            excl = ",".join(str(n) for n in parts[0][1])
+        else:
+            excl = " ; ".join(f"{d}: " + ",".join(str(n) for n in lst) for d, lst in parts)
+        return {"reglages": {"exclure": excl}, "explication": " ".join(expl), "refuses": refus, "modele": model,
+                "objectif": objectif}
+    vals = {**step.defaults(), **{k: v for k, v in (data.get("vals") or {}).items() if k in step.defaults()}}
+    rapport = report.build(p, sid, pour_modele=True) if (p.state["steps"].get(sid) or {}).get("variants") else ""
+    out = intentions.traduire(cfg["ollama_url"], model, step, vals, objectif, rapport)
+    out["modele"], out["objectif"] = model, objectif
     return out

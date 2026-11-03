@@ -254,7 +254,7 @@ def ollama_fields(url, model, p, timeout=600):
     from .steps.export import tech_facts
     tf = tech_facts(p)
     cache = p.state.get("fiche_auto") or {}
-    tn = technical_name(p)
+    tn = re.sub(r"[^\w +.\-]", "", technical_name(p) or "")[:40].strip()      # une désignation, pas une consigne
     facts = [f"Objet : {tn}" if tn else
              "Objet : désignation inconnue (le dossier porte un nom sans rapport) : identifie l'objet d'après les "
              "coordonnées et le type, et donne sa désignation principale en premier dans « catalogues »",
