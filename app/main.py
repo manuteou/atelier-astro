@@ -28,6 +28,16 @@ async def permission_error(_, exc):
     return JSONResponse({"detail": str(exc) or "non autorisé"}, status_code=403)
 
 
+@app.middleware("http")
+async def toujours_a_jour(request, call_next):
+    """Pages et scripts de l'interface : le navigateur revalide à chaque chargement (ETag), pour qu'une mise à jour
+    de l'appli (git pull) soit visible sans vider son cache."""
+    rep = await call_next(request)
+    if not request.url.path.startswith(("/api/", "/files/", "/galerie/")):
+        rep.headers["Cache-Control"] = "no-cache"
+    return rep
+
+
 for r in ROUTERS:
     app.include_router(r)
 
