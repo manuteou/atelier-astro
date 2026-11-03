@@ -3,6 +3,9 @@ config.json
 config.bak
 presets/*.json
 
+# Caches de l'appli (vignettes de « Mes travaux », etc.)
+cache/
+
 # Python
 __pycache__/
 *.py[cod]

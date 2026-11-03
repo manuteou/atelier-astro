@@ -58,6 +58,7 @@ jpg(d5 / "IC1396_FINAL_colorise_HD.jpg", (.6, .3, .3))
 (base / "secret.txt").write_text("hors du dossier")
 
 os.environ["ATELIER_ROOT"] = str(base)
+os.environ["ATELIER_VIGNETTES"] = str(tmp / "vignettes")          # pas de cache dans le dépôt
 sys.path.insert(0, str(ROOT))
 from app import config, galerie  # noqa: E402
 

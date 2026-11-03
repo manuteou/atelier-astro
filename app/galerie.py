@@ -6,6 +6,7 @@ le travail » (« Cible - Lieu - date ») qui contient au moins une image finale
 dossiers du pipeline (CIBLE_combined/keep) ne sont pas affichés.
 Rien n'est jamais modifié : lecture seule, vignettes mises en cache à part."""
 import hashlib
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ from . import config
 
 IMG = {".jpg", ".jpeg", ".png"}
 SOUS_DOSSIERS = ("keep", "final", "finaux")
-VIGNETTES = config.CONFIG_PATH.parent / "cache" / "vignettes"
+VIGNETTES = Path(os.environ.get("ATELIER_VIGNETTES") or config.CONFIG_PATH.parent / "cache" / "vignettes")
 
 # ordre d'affichage des images d'un travail
 GENRES = (("colorise", "Colorisée"), ("naturel", "Naturelle"), ("stack_brut", "Stack brut"), ("partage", "Partage"))
