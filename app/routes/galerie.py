@@ -69,7 +69,7 @@ def site_fabriquer(data: dict):
     """Fabrique le site (et le publie si data.publier) : travail en arrière-plan."""
     from .. import site
     titre = str(data.get("titre") or "").strip()[:80]
-    depot = str(data.get("depot") or "").strip()
+    depot = site.normaliser_depot(data.get("depot"))
     publier = bool(data.get("publier"))
     config.set_value("site_titre", titre)
     if depot:

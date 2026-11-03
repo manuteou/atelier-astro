@@ -103,6 +103,8 @@ try:
     lst = _sp.run(["git", "--git-dir", str(nu), "ls-tree", "-r", "--name-only", "main"], capture_output=True, text=True).stdout
     assert "index.html" in lst and "img/ngc-7380/colorise.jpg" in lst, lst
     assert site.publier(f"file://{nu}", dsite, "Test galerie", log=lambda *a: None)["publie"] == "inchangé"
+    assert site.normaliser_depot("https://manuteou.github.io/astro/") == "https://github.com/manuteou/astro.git"
+    assert site.normaliser_depot("https://github.com/manuteou/astro") == "https://github.com/manuteou/astro.git"
     try:
         site.publier("ignore; rm -rf /", dsite)
         raise AssertionError("adresse de dépôt farfelue acceptée")

@@ -120,9 +120,22 @@ def _git(args, cwd, log):
     return r
 
 
+def normaliser_depot(depot):
+    """Accepte aussi l'adresse du site (https://compte.github.io/depot/) ou celle de la page du dépôt
+    (https://github.com/compte/depot) : renvoie l'adresse git (https://github.com/compte/depot.git)."""
+    d = str(depot or "").strip()
+    m = re.match(r"^https?://([\w-]+)\.github\.io/([\w.-]+?)/?$", d)
+    if m:
+        return f"https://github.com/{m.group(1)}/{m.group(2)}.git"
+    m = re.match(r"^https?://github\.com/([\w-]+)/([\w.-]+?)(\.git)?/?$", d)
+    if m:
+        return f"https://github.com/{m.group(1)}/{m.group(2)}.git"
+    return d
+
+
 def publier(depot, dest=None, titre="", log=print):
     """Construit puis pousse le site sur `depot` (URL git, ex. https://github.com/<compte>/astro.git), branche main."""
-    depot = str(depot or "").strip()
+    depot = normaliser_depot(depot)
     if not re.match(r"^(https://|git@|file://)[\w.@:/~-]+$", depot):
         raise ValueError("adresse du dépôt invalide (ex. : https://github.com/ton-compte/astro.git)")
     if shutil.which("git") is None:
