@@ -435,7 +435,8 @@ class Naturel(Step):
     id, phase, kind = "P7T", "2 · Étirement et étoiles", "auto"
     title = "Image finale naturelle"
     help = ("Image sans étoiles et étoiles retenues réunies, sans aucune retouche de couleur. Elle sert de référence "
-            "pour comparer les couleurs à l'étape suivante, et donne la version « naturelle » de l'export et de la fiche.")
+            "pour comparer les couleurs à l'étape suivante, et donne la version « naturelle » de l'export et de la fiche. "
+            "Faite et validée d'elle-même juste après P7 ; l'appli ne s'y arrête qu'en cas d'alerte.")
     params = []
     preview_key = "naturel"
     linear = False

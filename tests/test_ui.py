@@ -134,6 +134,27 @@ try:
         assert der.startswith("zone") and len(der.split(":")[1].split(",")) == 4, zt
         print("  zone de mesure dessinée :", zt)
 
+        # 2f. valider P7 : l'image naturelle (P7T, automatique sans réglage) se fait et se valide d'elle-même
+        n7t = pg.evaluate("() => (S.data.steps.find(s => s.id === 'P7T').state.variants || [])[0]?.run || 0")
+        pg.evaluate("() => { S.sid = 'P7'; S.edit = {}; renderSteps(); renderMain(); }")
+        pg.evaluate("() => { S.edit.P7 = [S.edit.P7[0]]; renderMain(); }")       # une seule variante : plus rapide
+        pg.click("#btnRun")
+        pg.wait_for_selector("button.ok:has-text('Valider A')", timeout=60000)
+        pg.click("button.ok:has-text('Valider A')")
+        pg.wait_for_function("() => !S.job && ['P7BIS', 'P7T'].includes(S.sid) && "
+                             "(S.data.steps.find(s => s.id === 'P7T').state.variants || [])[0]?.run > %d" % n7t, timeout=60000)
+        pg.wait_for_timeout(300)
+        sid, st7t, toast = pg.evaluate("() => [S.sid, S.data.steps.find(s => s.id === 'P7T').state.status, "
+                                        "document.querySelector('#toast').textContent]")
+        alerte = any(l.startswith("ATTENTION") for l in pg.evaluate(
+            "() => S.data.steps.find(s => s.id === 'P7T').state.variants[0].info"))
+        if alerte:      # données de test : contrôles en alerte -> l'appli s'arrête sur P7T et le dit
+            assert sid == "P7T" and st7t != "done" and "alerte" in toast, (sid, st7t, toast)
+            print("  P7 validée : P7T lancée d'elle-même, arrêt sur P7T car alerte des contrôles")
+        else:
+            assert sid == "P7BIS" and st7t == "done", (sid, st7t)
+            print("  P7 validée : P7T faite et validée d'elle-même, page suivante P7BIS")
+
         # 3. cadrage : un cadre dessiné à la souris arrive dans les réglages
         pg.evaluate("() => { S.sid = 'P0'; S.edit = {}; renderSteps(); renderMain(); }")
         stage = pg.wait_for_selector(".crop-stage img, .cstage img, .cropper img")

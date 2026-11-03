@@ -18,20 +18,39 @@ export async function validate(step, i) {
   try {
     await api("POST", `/api/projects/${S.project}/steps/${step.id}/validate`, { variant: i });
     toast(`${step.id} : variante ${LETTERS[i]} validée`);
-    const idx = S.data.steps.findIndex(s => s.id === step.id);
-    await openProject(S.project, true);
-    const next = S.data.steps.slice(idx + 1).find(s => s.applies);
-    if (next) { S.sid = next.id; renderSteps(); renderMain(); }
+    await avancer(step);
+  } catch (e) { toast(e.message, true); }
+}
+
+/** Passe à l'étape suivante. Une étape automatique sans réglage (image naturelle P7T, fusion P9) est lancée et validée
+ *  d'elle-même ; on ne s'y arrête que si elle échoue ou affiche une alerte. */
+async function avancer(step) {
+  const idx = S.data.steps.findIndex(s => s.id === step.id);
+  await openProject(S.project, true);
+  const next = S.data.steps.slice(idx + 1).find(s => s.applies);
+  if (!next) return;
+  S.sid = next.id; renderSteps(); renderMain();
+  if (next.kind !== "auto" || next.params.length || !next.ready || S.job) return;
+  try {
+    const r = await api("POST", `/api/projects/${S.project}/steps/${next.id}/run`, { variants: [{}] });
+    await pollJob(r.job);
+    const st = stepById(next.id)?.state;
+    const v = st?.variants?.[0];
+    if (!v || v.error || (v.info || []).some(l => String(l).startsWith("ATTENTION"))) {
+      if (v && !v.error) toast(`${next.id} fait automatiquement, mais avec une alerte : regarde avant de valider`, true);
+      S.sid = next.id; renderSteps(); renderMain();
+      return;
+    }
+    await api("POST", `/api/projects/${S.project}/steps/${next.id}/validate`, { variant: 0 });
+    toast(`${next.id} · ${next.title} : fait et validé automatiquement`);
+    await avancer(next);
   } catch (e) { toast(e.message, true); }
 }
 
 export async function skipStep(step) {
   try {
     await api("POST", `/api/projects/${S.project}/steps/${step.id}/skip`);
-    const idx = S.data.steps.findIndex(s => s.id === step.id);
-    await openProject(S.project, true);
-    const next = S.data.steps.slice(idx + 1).find(s => s.applies);
-    if (next) { S.sid = next.id; renderSteps(); renderMain(); }
+    await avancer(step);
   } catch (e) { toast(e.message, true); }
 }
 

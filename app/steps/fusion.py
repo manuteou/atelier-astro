@@ -10,7 +10,8 @@ class Fusion(Step):
     id, phase, kind = "P9", "3 · Couleurs et export", "auto"
     title = "Fusion en écran"
     help = ("Réunit le calque couleur et les étoiles. La colonne « Réf. » montre l'image brute recadrée pour comparer. "
-            "En mode B (étoiles de l'IRCUT), vérifie sur un zoom qu'aucune étoile n'est doublée ni décalée.")
+            "En mode B (étoiles de l'IRCUT), vérifie sur un zoom qu'aucune étoile n'est doublée ni décalée. Faite et "
+            "validée d'elle-même après l'étape précédente ; l'appli ne s'y arrête qu'en cas d'alerte (étoiles doublées…).")
     params = []
     preview_key = "fusion"
     linear = False
