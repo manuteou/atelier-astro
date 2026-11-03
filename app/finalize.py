@@ -47,10 +47,10 @@ def file_prefix(p):
 
 
 def plan(p, name=None):
-    cfg = config.load()
     pre = file_prefix(p)
     ren = lambda n: (pre + n[len(p.T):]) if n.startswith(p.T + "_") else n
-    root = Path(cfg["astro_root"])
+    from .galerie import racine
+    root = racine()                      # FINAUX TRAITES s'il existe (ou le dossier réglé), sinon la racine
     ex = p.state["facts"].get("exports") or {}
     if not ex:
         raise ValueError("rien à finaliser : valide d'abord l'export (P12)")

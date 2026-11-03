@@ -250,10 +250,22 @@ séparation est moins nette : l'appli le signale.
   Position, taille et opacité réglables ; la signature est retenue pour les projets suivants. Le FIT et le TIFF ne
   sont jamais signés, et les contrôles de correspondance des exports se font sur l'image vierge.
 
+## Mes travaux (exploration)
+
+Le bouton « Mes travaux » (barre du haut, ou page d'accueil) ouvre une galerie des travaux terminés : une carte par
+cible (image colorisée, lieu, date, nombre de traitements, présence d'une fiche), une recherche par cible ou lieu,
+puis pour chaque traitement ses images finales (colorisée, naturelle, stack brut, partage ; la dernière version
+d'abord), sa fiche PDF affichée dans la page, ses notes et un bouton qui ouvre le dossier. Visionneuse plein écran
+(flèches du clavier). Dossier exploré : « Dossier des travaux terminés » dans Réglages, sinon
+`<racine>\FINAUX TRAITES` s'il existe, sinon la racine. Les dossiers de l'appli (« Cible - Lieu - date ») comme les
+anciens `CIBLE_combined\keep` sont lus ; deux traitements de la même cible (Sh2-132, SH2-132_mosaic) sont réunis.
+Lecture seule : rien n'est modifié, les vignettes sont gardées dans un cache à part.
+
 ## Finaliser le travail
 
 Sur les pages Export (P12) et Fiche (P13), « Finaliser le travail » ouvre un récapitulatif : nom du dossier final
-(nom technique - lieu - date de la nuit, modifiable), fichiers gardés (fiche PDF, finales colorisée et naturelle,
+(nom technique - lieu - date de la nuit, modifiable ; rangé dans `FINAUX TRAITES` s'il existe, ou dans le dossier
+réglé), fichiers gardés (fiche PDF, finales colorisée et naturelle,
 stack brut, JPEG de partage, TIFF, FIT final, NOTES.md), ce qui sera supprimé et la place libérée. Rien ne se fait
 sans cocher la confirmation. Les fichiers sont copiés et vérifiés **avant** toute suppression ; puis le dossier de
 travail du projet et les poses calibrées intermédiaires (`_calibrees`) sont supprimés. Les poses d'origine

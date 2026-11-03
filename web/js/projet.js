@@ -5,6 +5,7 @@ import { dlgNotes } from "./fenetres/notes.js";
 import { dlgNewProject } from "./fenetres/nouveau_projet.js";
 import { dlgPresets } from "./fenetres/presets.js";
 import { dlgSettings } from "./fenetres/reglages.js";
+import { openExplorer } from "./explorer.js";
 import { renderMain } from "./page.js";
 import { cancelJob, watchJob } from "./travaux.js";
 import { closeViewer } from "./visionneuse.js";
@@ -13,6 +14,8 @@ import { closeViewer } from "./visionneuse.js";
 export async function init() {
   $("#btnNew").onclick = $("#btnNew2").onclick = () => dlgNewProject();
   $("#btnSettings").onclick = dlgSettings;
+  $("#btnExplorer").onclick = () => openExplorer();
+  if ($("#btnExplorer2")) $("#btnExplorer2").onclick = () => openExplorer();
   $("#btnMateriel").onclick = () => dlgMateriel();
   $("#btnPresets").onclick = dlgPresets;
   $("#btnNotes").onclick = dlgNotes;

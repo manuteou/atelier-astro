@@ -15,6 +15,9 @@ FONTS_DIR = APP_DIR / "fonts"
 DEFAULTS = {
     # Dossier racine des sessions : <racine>\<SESSION>\lights\*.fit ; les projets y sont créés (<CIBLE>_combined)
     "astro_root": "D:\\Astrophoto",
+    # Dossier des travaux terminés (exploration, et destination de « Finaliser le travail ») ; vide :
+    # <racine>\FINAUX TRAITES s'il existe, sinon la racine
+    "dossier_finaux": "",
     # Exécutable Siril en ligne de commande (siril-cli.exe sous Windows)
     "siril_cli": "",
     # Noms des scripts Python installés dans Siril (appelés par pyscript)
