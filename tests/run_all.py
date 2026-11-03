@@ -11,7 +11,8 @@ E2E = [["A", "nebuleuse"], ["B", "nebuleuse"], ["B", "galaxie"], ["A", "nebuleus
        ["A", "nebuleuse", "generique"]]
 SUITE = [("import en vrac", ["test_import.py"]), ("annulation et progression", ["test_annulation.py"]),
          ("propositions de réglage fin", ["test_suggest.py"]), ("réglage fin : aperçu = pleine résolution", ["test_tune_js.py"]),
-         ("qualité du ciel mesurée", ["test_ciel.py"]), ("exploration des travaux terminés", ["test_galerie.py"])]
+         ("qualité du ciel mesurée", ["test_ciel.py"]), ("exploration des travaux terminés", ["test_galerie.py"]),
+         ("halos des étoiles brillantes", ["test_halos.py"])]
 SUITE += [("bout en bout " + " ".join(a), ["test_e2e.py"] + a) for a in (E2E[:1] if "--rapide" in sys.argv else E2E)]
 if "--rapide" not in sys.argv:
     SUITE += [("bout en bout B nebuleuse, Siril qui plante", ["test_e2e.py", "B", "nebuleuse"], {"MOCK_CRASH_WEIGHT": "1"}),

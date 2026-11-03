@@ -339,7 +339,7 @@ class Etoiles(Step):
     def run(self, ctx, prm, tag):
         p = ctx.p
         src = p.file("stars_ir") if (prm["source"] == "ir" and p.file("stars_ir")) else p.file("stars_raw")
-        starless = p.file("starless")
+        starless = starless_base(p)
         out = ctx.out(tag, "stars")
         info = []
         m = prm["methode"]
@@ -405,9 +405,15 @@ class Etoiles(Step):
         return s
 
 
+def starless_base(p):
+    """Calque sans étoiles avec les halos corrigés (P6H) s'ils ont été validés."""
+    return p.latest("starless_halos", "starless")
+
+
 def starless_layer(p):
-    """Calque sans étoiles en cours : avec les noirs retravaillés (P6N) s'ils ont été validés."""
-    return p.latest("starless_noir", "starless")
+    """Calque sans étoiles en cours : avec les halos corrigés (P6H) et les noirs retravaillés (P6N) s'ils ont été
+    validés."""
+    return p.latest("starless_noir", "starless_halos", "starless")
 
 
 def p6_passe(p):
@@ -493,7 +499,7 @@ class Noirs(Step):
     def run(self, ctx, prm, tag):
         import cv2
         p = ctx.p
-        d, h = fitsio.read(p.file("starless"))
+        d, h = fitsio.read(starless_base(p))
         L = d.mean(0)
         skym = fitsio.sky_mask(d)
         skies = np.array([float(np.median(d[c][skym])) for c in range(d.shape[0])])
@@ -545,7 +551,7 @@ class Noirs(Step):
             info.append(f"ATTENTION {lost:.0f} % des zones faibles sont devenues noires : franges de nébulosité perdues. "
                         "Remonte le niveau visé, augmente la douceur ou active la protection de la nébuleuse.")
         info += checks.crushed_blacks(out)
-        info += checks.noise_change(p.file("starless"), o, "après assombrissement")
+        info += checks.noise_change(starless_base(p), o, "après assombrissement")
         return {"outputs": {"starless_noir": ctx.rel(o)}, "info": info}
 
     def notes(self, p, st):
@@ -554,4 +560,69 @@ class Noirs(Step):
                 + (f", nébuleuse protégée (percentile {x.get('seuil_objet'):.0f})" if x.get("proteger") else ""))
 
 
-STEPS = [Etirement(), StarX(), Noirs(), PisteSecondaire(), Etoiles(), Naturel()]
+class Halos(Step):
+    id, phase, kind, optional = "P6H", "2 · Étirement et étoiles", "creatif", True
+    title = "Halos et reflets des étoiles brillantes (calque sans étoiles)"
+    help = ("StarXTerminator laisse souvent, à la place d'une étoile très brillante, un cœur clair (disque ou "
+            "croissant), une lueur autour, et parfois un reflet optique (disque ou anneau bleuté décalé de l'étoile). "
+            "Cette étape les corrige sur le calque sans étoiles, avant les noirs du fond (P6N) :\n"
+            "• cœur résiduel des étoiles les plus brillantes : remplacé par le fond environnant, avec le même grain ;\n"
+            "• lueur : sa partie circulaire autour de l'étoile est retirée, la nébuleuse (pas circulaire) reste ;\n"
+            "• reflets et grands halos : entoure-les d'un cercle sur l'image ci-dessous, bord compris. Autour d'une étoile "
+            "très brillante, le plus efficace est souvent UN grand cercle qui englobe tout (lueur, reflet bleuté, grand "
+            "anneau extérieur) : dans le cercle, les grandes échelles sont remplacées par le fond d'autour, les détails "
+            "fins (nébuleuse, grain) sont gardés.\n"
+            "L'étoile elle-même revient intacte avec le calque d'étoiles. Étape facultative : passe-la si aucune étoile "
+            "brillante ne gêne.")
+    params = [
+        P("n_etoiles", "Étoiles brillantes à réparer (cœur et lueur)", "int", 2, 0, 10, 1,
+          help="les plus grosses étoiles du calque d'étoiles (au moins ~20 px de diamètre) ; 0 = seulement les reflets"),
+        P("force", "Force", "float", 1.0, 0.2, 1.0, 0.05,
+          help="part de la lueur et du reflet retirée : 1 = tout, 0.6 = en laisser un peu (plus naturel autour "
+               "d'une étoile très brillante)"),
+        P("reflets", "Reflets à effacer (cercles dessinés)", "text", "",
+          help="x,y,rayon ; … en pixels pleine résolution, y depuis le haut — se remplit en dessinant sur l'image"),
+    ]
+    default_variants = [{"force": 1.0}, {"force": 0.6}]
+    preview_key = "starless_halos"
+    linear = False
+    reference_step = "P6"
+    canonical = {"starless_halos": "{T}_starless_halos.fit"}
+    produces = ("starless_halos",)
+
+    def applies(self, p):
+        return (not p6_passe(p), "étoiles gardées dans l'image (séparation passée ou sans outil) : rien à corriger")
+
+    def ready(self, p):
+        return (p.file("starless") is not None and p.file("stars_raw") is not None, "valider d'abord StarX (P6)")
+
+    def run(self, ctx, prm, tag):
+        from .. import halos
+        p = ctx.p
+        sl, h = fitsio.read(p.file("starless"))
+        st, _ = fitsio.read(p.file("stars_raw"))
+        cercles = []
+        for z in [z.strip() for z in str(prm.get("reflets") or "").split(";") if z.strip()]:
+            try:
+                x, y, r = [float(v) for v in z.split(",")[:3]]
+            except ValueError:
+                raise ValueError(f"reflet mal écrit : {z!r} (attendu x,y,rayon)")
+            row = fitsio.y_top_to_row(y, sl.shape[1], h)
+            if not (0 <= x < sl.shape[2] and 0 <= row < sl.shape[1]) or r < 3:
+                raise ValueError(f"reflet hors de l'image ou trop petit : {z!r}")
+            cercles.append((x, row, r))
+        out, info = halos.corriger(sl, st, int(prm["n_etoiles"]), float(prm["force"]), cercles)
+        if not info:
+            info.append("Rien à corriger : aucune étoile assez grosse dans le calque d'étoiles et aucun reflet dessiné.")
+        o = ctx.out(tag, "starless_halos")
+        fitsio.write(o, out, h)
+        info += checks.noise_change(p.file("starless"), o, "après correction des halos")
+        return {"outputs": {"starless_halos": ctx.rel(o)}, "info": info}
+
+    def notes(self, p, st):
+        x = st["params"]
+        return (f"Halos des étoiles brillantes : {x.get('n_etoiles')} étoile(s), force {x.get('force')}"
+                + (f", reflets {x['reflets']}" if x.get("reflets") else ""))
+
+
+STEPS = [Etirement(), StarX(), Halos(), Noirs(), PisteSecondaire(), Etoiles(), Naturel()]

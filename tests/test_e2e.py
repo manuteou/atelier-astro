@@ -200,6 +200,9 @@ run("P4", [{"dn": 0.5}, {"dn": 0.8}, {"dn": 0.9}]); val("P4", 1)
 run("P5", [{"methode": "autostretch", "targetbg": 0.07}, {"methode": "mtf", "fond": "noir", "m": 0.01},
            {"methode": "statistical", "ss_median": 0.2}, {"methode": "autoghs"}]); val("P5", 0)
 run("P6"); val("P6")
+_, vs6h = run("P6H", [{"reflets": "300,100,40"}, {"force": 0.6, "n_etoiles": 0}]); val("P6H", 0)
+assert any(l.startswith("Reflet 1 effacé") for l in vs6h[0]["info"]), vs6h[0]["info"]
+assert ok(c.get(f"/api/projects/{NAME}"))["state"]["files"].get("starless_halos"), "calque corrigé retenu"
 st, vs = run("P6N", [{"niveau": 18}, {"niveau": 6, "proteger": False, "douceur": 0}, {"niveau": 10}]); val("P6N", 2)
 if MODE == "B":
     run("P6B"); val("P6B")
