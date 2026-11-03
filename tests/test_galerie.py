@@ -67,14 +67,13 @@ try:
     assert galerie.racine() == fin, "FINAUX TRAITES pris d'office quand il existe"
     r = galerie.explorer()
     cibles = {c["cle"]: c for c in r["cibles"]}
-    assert set(cibles) == {"NGC7380", "SH2132", "IC1396A", "IC1396"}, list(cibles)
-    assert len(cibles["SH2132"]["travaux"]) == 2, "Sh2-132 et SH2-132 mosaïque : une seule cible, deux traitements"
+    assert set(cibles) == {"NGC7380", "SH2132", "IC1396A"}, "anciens dossiers _combined/keep non affichés"
+    assert len(cibles["SH2132"]["travaux"]) == 1
     t = cibles["NGC7380"]["travaux"][0]
     assert (t["lieu"], t["date"]) == ("Buc", "2026-09-25"), t
     assert [i["genre"] for i in t["images"]] == ["colorise", "naturel", "stack_brut", "partage"], t["images"]
     assert t["fiches"] and t["faits"]["integration"] == "3 h 23" and t["faits"]["appareil"] == "ZWO Seestar S50", t["faits"]
     assert cibles["IC1396A"]["travaux"][0]["images"][0]["version"] == 3, "la dernière version d'abord"
-    assert cibles["IC1396"]["cible"] == "IC1396" and cibles["IC1396"]["travaux"][0]["id"] == "IC1396_combined/keep"
     v = galerie.vignette(t["couverture"], 300)
     assert max(Image.open(v).size) == 300
     for mauvais in ("../secret.txt", "NGC 7380 - Buc - 2026-09-25/../../secret.txt"):
@@ -103,7 +102,7 @@ try:
             pg.wait_for_timeout(800)
             pg.click("#btnExplorer")
             pg.wait_for_selector(".ex-carte")
-            assert pg.locator(".ex-carte").count() == 4
+            assert pg.locator(".ex-carte").count() == 3
             pg.wait_for_timeout(600)
             assert pg.evaluate("() => [...document.querySelectorAll('.ex-carte img')].every(i => i.complete && i.naturalWidth > 0)")
             pg.screenshot(path=str(tmp / "grille.png"))
@@ -111,7 +110,7 @@ try:
             assert pg.locator(".ex-carte").count() == 1
             pg.click(".ex-carte")
             pg.wait_for_selector(".ex-travail")
-            assert pg.locator(".ex-travail").count() == 2
+            assert pg.locator(".ex-travail").count() == 1
             pg.click("text=← Toutes les cibles")
             pg.fill(".ex-bar input", "")
             pg.click(".ex-carte >> text=NGC 7380")

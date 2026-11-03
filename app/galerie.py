@@ -1,8 +1,9 @@
 """Exploration des travaux terminés : pour chaque cible, ses images finales, sa fiche PDF et ses notes.
 
 Où chercher : le réglage « dossier_finaux » s'il est rempli, sinon <racine>/FINAUX TRAITES s'il existe, sinon la
-racine elle-même (où « Finaliser le travail » range les dossiers). Un travail est un dossier (ou son sous-dossier
-« keep », format des anciens projets du pipeline) qui contient au moins une image finale JPEG ou une fiche PDF.
+racine elle-même (où « Finaliser le travail » range les dossiers). Un travail est un dossier rangé par « Finaliser
+le travail » (« Cible - Lieu - date ») qui contient au moins une image finale JPEG ou une fiche PDF ; les anciens
+dossiers du pipeline (CIBLE_combined/keep) ne sont pas affichés.
 Rien n'est jamais modifié : lecture seule, vignettes mises en cache à part."""
 import hashlib
 import re
@@ -128,13 +129,14 @@ def explorer():
     for d in sorted(base.iterdir()):
         if not d.is_dir() or d.name.startswith("."):
             continue
-        for cand in [d] + [d / s for s in SOUS_DOSSIERS if (d / s).is_dir()]:
-            try:
-                t = _travail(cand, base)
-            except OSError:
-                t = None
-            if t:
-                trav.append(t)
+        if re.search(r"_(combined|sub)(_v\d+)?$", d.name, re.I):
+            continue                              # ancien format du pipeline (CIBLE_combined/keep) : non affiché
+        try:
+            t = _travail(d, base)
+        except OSError:
+            t = None
+        if t:
+            trav.append(t)
     cibles = {}
     for t in trav:
         c = cibles.setdefault(t["cle"], {"cle": t["cle"], "cible": t["cible"], "travaux": []})

@@ -257,8 +257,8 @@ cible (image colorisée, lieu, date, nombre de traitements, présence d'une fich
 puis pour chaque traitement ses images finales (colorisée, naturelle, stack brut, partage ; la dernière version
 d'abord), sa fiche PDF affichée dans la page, ses notes et un bouton qui ouvre le dossier. Visionneuse plein écran
 (flèches du clavier). Dossier exploré : « Dossier des travaux terminés » dans Réglages, sinon
-`<racine>\FINAUX TRAITES` s'il existe, sinon la racine. Les dossiers de l'appli (« Cible - Lieu - date ») comme les
-anciens `CIBLE_combined\keep` sont lus ; deux traitements de la même cible (Sh2-132, SH2-132_mosaic) sont réunis.
+`<racine>\FINAUX TRAITES` s'il existe, sinon la racine. Seuls les dossiers rangés par l'appli (« Cible - Lieu -
+date ») sont affichés, pas les anciens `CIBLE_combined\keep` ; deux traitements de la même cible sont réunis.
 Lecture seule : rien n'est modifié, les vignettes sont gardées dans un cache à part.
 
 ## Finaliser le travail
