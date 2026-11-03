@@ -85,6 +85,31 @@ try:
             pass
     print(f"  {len(r['cibles'])} cibles, regroupement et lecture des notes corrects")
 
+    # site statique à publier : construction, incrémental, envoi sur un dépôt git
+    from app import site  # noqa: E402
+    dsite = tmp / "site"
+    r1 = site.construire(dsite, "Test galerie", log=lambda *a: None)
+    assert r1["cibles"] == 3 and r1["convertis"] > 0, r1
+    noms = {f.relative_to(dsite).as_posix() for f in dsite.rglob("*") if f.is_file()}
+    assert "index.html" in noms and any(n.startswith("fiches/") for n in noms) and "img/ngc-7380/colorise.jpg" in noms, noms
+    assert not any(n.endswith((".fit", ".tif", ".md")) for n in noms), "jamais de FIT, TIFF ni NOTES publiés"
+    assert max(Image.open(dsite / "img/ngc-7380/colorise.jpg").size) <= site.LARGEUR_WEB
+    assert site.construire(dsite, "Test galerie", log=lambda *a: None)["convertis"] == 0, "rien à refaire la 2e fois"
+    import subprocess as _sp
+    nu = tmp / "depot.git"
+    _sp.run(["git", "init", "--bare", "-q", str(nu)], check=True)
+    rp = site.publier(f"file://{nu}", dsite, "Test galerie", log=lambda *a: None)
+    assert rp["publie"] == "envoyé", rp
+    lst = _sp.run(["git", "--git-dir", str(nu), "ls-tree", "-r", "--name-only", "main"], capture_output=True, text=True).stdout
+    assert "index.html" in lst and "img/ngc-7380/colorise.jpg" in lst, lst
+    assert site.publier(f"file://{nu}", dsite, "Test galerie", log=lambda *a: None)["publie"] == "inchangé"
+    try:
+        site.publier("ignore; rm -rf /", dsite)
+        raise AssertionError("adresse de dépôt farfelue acceptée")
+    except ValueError:
+        pass
+    print(f"  site statique : {r1['cibles']} cibles, {r1['taille_mo']} Mo, envoyé sur un dépôt git, 2e envoi inchangé")
+
     # dans le navigateur
     s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
     srv = subprocess.Popen([sys.executable, "-m", "app.main"], cwd=ROOT,
@@ -130,6 +155,10 @@ try:
             pg.screenshot(path=str(tmp / "visionneuse.png"))
             pg.keyboard.press("Escape")
             assert pg.locator(".ex-lb").count() == 0
+            pg.click("text=← Toutes les cibles")
+            pg.click(".ex-bar button:has-text(\"Publier le site\")")
+            pg.wait_for_selector("#dlg:not(.hidden) button:has-text(\"Publier sur GitHub\")")
+            pg.click("#dlgClose")
             pg.click(".ex-bar button:has-text(\"Fermer\")")
             assert pg.locator("#explorer.hidden").count() == 1
             n_err = len(errors)
@@ -137,6 +166,21 @@ try:
             assert st == 404, st
             pg.wait_for_timeout(200)
             del errors[n_err:]                    # le 404 voulu ci-dessus n'est pas une erreur de la page
+            sp = b.new_page(viewport={"width": 1200, "height": 900})
+            sp.on("pageerror", lambda e: errors.append(f"site pageerror : {e}"))
+            sp.goto((tmp / "site" / "index.html").as_uri())
+            sp.wait_for_selector(".carte")
+            assert sp.locator(".carte").count() == 3
+            sp.click(".carte >> text=NGC 7380")
+            sp.wait_for_selector(".images figure")
+            assert sp.locator("a.fiche").count() == 1
+            sp.click(".images figure >> nth=0")
+            sp.wait_for_selector(".lb img")
+            sp.screenshot(path=str(tmp / "site_detail.png"))
+            sp.keyboard.press("Escape")
+            sp.click("text=← Toutes les cibles")
+            sp.wait_for_selector(".carte")
+            sp.screenshot(path=str(tmp / "site_accueil.png"))
             b.close()
     finally:
         srv.terminate()

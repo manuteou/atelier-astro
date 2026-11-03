@@ -267,6 +267,16 @@ d'abord), sa fiche PDF affichée dans la page, ses notes et un bouton qui ouvre 
 date ») sont affichés, pas les anciens `CIBLE_combined\keep` ; deux traitements de la même cible sont réunis.
 Lecture seule : rien n'est modifié, les vignettes sont gardées dans un cache à part.
 
+### Publier « Mes travaux » sur le web
+
+« Publier le site… » (dans Mes travaux) fabrique un site de fichiers : une page d'accueil par cible, la page de chaque
+cible avec ses images (colorisée, naturelle, stack brut ; redimensionnées à 2560 px pour le web), une visionneuse et
+la fiche PDF. Jamais de FIT, de TIFF ni de NOTES. Dossier : `<racine>\site_galerie` (réglable : `site_dossier`).
+« Fabriquer et voir en local » l'ouvre dans le navigateur ; « Publier sur GitHub » l'envoie sur un dépôt (branche
+main) que GitHub Pages sert gratuitement (`https://<compte>.github.io/<dépôt>/`) : le PC peut rester éteint, l'appli
+n'est jamais exposée. Préparer une fois : créer le dépôt vide sur GitHub, coller son adresse, publier, puis
+Settings → Pages → branche main, dossier racine. Les publications suivantes ne renvoient que ce qui a changé.
+
 ## Finaliser le travail
 
 Sur les pages Export (P12) et Fiche (P13), « Finaliser le travail » ouvre un récapitulatif : nom du dossier final

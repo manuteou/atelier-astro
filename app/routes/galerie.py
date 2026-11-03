@@ -5,7 +5,7 @@ import webbrowser
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from .. import galerie
+from .. import config, galerie, jobs
 
 router = APIRouter()
 
@@ -54,4 +54,41 @@ def ouvrir(data: dict):
             webbrowser.open(d.as_uri())
     except Exception as e:
         raise ValueError(str(e))
+    return {"ok": True}
+
+
+@router.get("/api/galerie/site")
+def site_infos():
+    from .. import site
+    cfg = config.load()
+    return {"dossier": str(site.dossier()), "depot": cfg.get("site_depot") or "", "titre": cfg.get("site_titre") or ""}
+
+
+@router.post("/api/galerie/site")
+def site_fabriquer(data: dict):
+    """Fabrique le site (et le publie si data.publier) : travail en arrière-plan."""
+    from .. import site
+    titre = str(data.get("titre") or "").strip()[:80]
+    depot = str(data.get("depot") or "").strip()
+    publier = bool(data.get("publier"))
+    config.set_value("site_titre", titre)
+    if depot:
+        config.set_value("site_depot", depot)
+    dest = site.dossier()
+
+    def work(job):
+        if publier:
+            return site.publier(depot, dest, titre, job.write)
+        return site.construire(dest, titre, job.write)
+    return {"job": jobs.submit("Mes travaux · " + ("publication du site" if publier else "fabrication du site"), work,
+                               key=dest).id}
+
+
+@router.post("/api/galerie/site/ouvrir")
+def site_ouvrir():
+    from .. import site
+    f = site.dossier() / "index.html"
+    if not f.exists():
+        raise HTTPException(404, "site pas encore fabriqué")
+    webbrowser.open(f.as_uri())
     return {"ok": True}

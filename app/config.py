@@ -18,6 +18,9 @@ DEFAULTS = {
     # Dossier des travaux terminés (exploration, et destination de « Finaliser le travail ») ; vide :
     # <racine>\FINAUX TRAITES s'il existe, sinon la racine
     "dossier_finaux": "",
+    # Site web de « Mes travaux » : dossier fabriqué (vide : <racine>\site_galerie), dépôt git où le publier
+    # (GitHub Pages), titre affiché
+    "site_dossier": "", "site_depot": "", "site_titre": "",
     # Exécutable Siril en ligne de commande (siril-cli.exe sous Windows)
     "siril_cli": "",
     # Noms des scripts Python installés dans Siril (appelés par pyscript)
