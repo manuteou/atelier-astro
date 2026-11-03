@@ -79,4 +79,23 @@ except ValueError as e:
 assert abs(ciel.v_de_gaia(10, 0.0) - 10.027) < 1e-3
 assert ciel._coord("+45 45 00") == 45.75 and ciel._coord(-1.5) == -1.5
 assert len(ciel.echantillon(list(range(100)))) == ciel.POSES_PAR_SESSION
+
+# S2 : voile (étoiles perdues, aussi fines, fond pas plus clair) et crépuscule, d'après le contexte de chaque pose
+from app.steps.stacking import classer  # noqa: E402
+rows = [{"session": "a", "index_seq_0": i, "index_seq_1": i + 1, "fichier": i + 1, "fond": "0.1", "rapport": "1.0",
+         "z": "0", "etoiles": "500", "fwhm": "3.0", "raison": "", "soleil": "-30"} for i in range(20)]
+rows[3].update(etoiles="300", rapport="0.8")
+rows[4].update(etoiles="180", rapport="0.6", raison="180 étoiles (< 40% de 500)")
+rows[5].update(etoiles="200", fwhm="4.5", raison="200 étoiles (< 40% de 500)")
+rows[6].update(soleil="-12", rapport="1.3")
+rows[7].update(soleil="-16", rapport="1.2")
+fl = {r["index_seq_1"]: r for r in classer(rows, {"facteur": 2, "z": 5})[0]}
+assert fl[4]["niveau"] == "mitigee" and fl[4]["raison"].startswith("voile"), fl[4]
+assert fl[5]["niveau"] == "nette" and "étoiles (<" not in fl[5]["raison"], "voile net : écarté d'office"
+assert not fl[6]["raison"].startswith("voile"), "étoiles élargies : flou, pas un voile"
+assert fl[7]["niveau"] == "nette" and "crépuscule" in fl[7]["raison"] and fl[8]["niveau"] == "mitigee"
+assert len(fl) == 5
+ctx = ciel.contexte_pose(inventory.lights_of(ses[1]["path"])[0])
+assert ctx["soleil"] < -18 and ctx["hauteur"] > 60, ctx
+print("  S2 : voiles et crépuscule classés comme attendu")
 print("OK")

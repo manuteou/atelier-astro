@@ -429,3 +429,19 @@ def lignes(res, bortle_declare=None):
     out.append("  (mesure photométrique sur les étoiles du catalogue Gaia, précision ± 0,3 mag ; repère : 22 = ciel "
                "parfait, 21 = campagne, 19 = banlieue, 17 = ville)")
     return out, best
+
+
+def contexte_pose(path):
+    """Hauteur du Soleil, de la Lune et de la cible au milieu d'une pose (en-tête seul, calcul local, sans Internet).
+    Dict vide si l'en-tête ne permet pas le calcul."""
+    try:
+        h = fits.getheader(path)
+        jd = _jd(_date(h))
+        lat, lon = _coord(h["SITELAT"]), _coord(h["SITELONG"])
+        out = {"soleil": round(_hauteur(*_soleil(jd), lat, lon, jd), 1),
+               "lune": round(_hauteur(*_lune(jd), lat, lon, jd), 1)}
+        if h.get("RA") not in (None, "") and h.get("DEC") not in (None, ""):
+            out["hauteur"] = round(_hauteur(float(h["RA"]), float(h["DEC"]), lat, lon, jd), 1)
+        return out
+    except Exception:
+        return {}

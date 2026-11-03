@@ -207,10 +207,47 @@ class Inventaire(Step):
         return s
 
 
+VOILE_NET, VOILE_MITIGE = 0.50, 0.65      # part des étoiles habituelles sous laquelle un voile est net / probable
+
+
+def voile(r, med_et, med_fw):
+    """Voile (buée, nuage fin) : étoiles perdues SANS étoiles élargies (sinon c'est du flou : vent, mise au point) et
+    SANS fond éclairci (sinon le critère du fond s'en charge). Retourne (niveau, raison) ou (None, None).
+    Important : une pose voilée a un fond plus sombre, donc moins bruité ; la pondération par le bruit du stack lui
+    donnerait PLUS de poids qu'aux bonnes poses."""
+    et, f, rap = float(r.get("etoiles") or 0), float(r.get("fwhm") or 0), float(r.get("rapport") or 0)
+    if not med_et or et >= VOILE_MITIGE * med_et:
+        return None, None
+    if med_fw and f > 1.25 * med_fw:
+        return None, None
+    if rap > 1.15:
+        return None, None
+    pct = round(100 * et / med_et)
+    sombre = f", fond plus sombre (x{rap:.2f})" if 0 < rap < 0.9 else ""
+    raison = (f"voile probable (buée, nuage fin) : {pct} % des étoiles habituelles, étoiles aussi fines{sombre} ; "
+              "le stack lui donnerait trop de poids")
+    return ("nette" if et < VOILE_NET * med_et else "mitigee"), raison
+
+
+def crepuscule(r):
+    """Aube ou crépuscule d'après la hauteur du Soleil (si connue)."""
+    sol = r.get("soleil")
+    if sol in (None, ""):
+        return None, None
+    sol = float(sol)
+    if sol > -14:
+        return "nette", f"crépuscule (Soleil à {sol:.0f}°)"
+    if sol > -17 and float(r.get("rapport") or 0) > 1.10:
+        return "mitigee", f"début de crépuscule (Soleil à {sol:.0f}°, fond x{float(r['rapport']):.2f})"
+    return None, None
+
+
 def classer(allrows, prm):
     """Trois niveaux, comme au point de contrôle manuel :
-    - nette : fond au moins `facteur` fois la normale de la nuit, ou moins de 25 % des étoiles, ou écart très fort ;
-    - mitigée : signalée par le tri (fond nettement inhabituel, ou moins de 40 % des étoiles) sans être nette ;
+    - nette : fond au moins `facteur` fois la normale de la nuit, ou moins de 25 % des étoiles, ou écart très fort,
+      ou voile net (moins de 50 % des étoiles, aussi fines, fond pas plus clair), ou Soleil au-dessus de -14° ;
+    - mitigée : signalée par le tri (fond nettement inhabituel, ou moins de 40 % des étoiles) sans être nette, voile
+      probable (moins de 65 % des étoiles, aussi fines), début de crépuscule ;
     - limite : non signalée mais à surveiller (fond +10 %, étoiles sous 60 % de la normale, FWHM 1,3 fois plus large).
     Retourne (signalées nettes + mitigées, limites, pose de référence typique)."""
     import statistics
@@ -230,9 +267,19 @@ def classer(allrows, prm):
         for r in rs:
             rap, z, et, f = num(r, "rapport"), num(r, "z"), num(r, "etoiles"), num(r, "fwhm")
             r = dict(r, etoiles_pct=round(100 * et / med_et))
+            niv = None
             if r.get("raison"):
                 net = rap > fac or et < 0.25 * med_et or (z > 2 * zt and rap > 1.25)
-                r["niveau"] = "nette" if net else "mitigee"
+                niv = "nette" if net else "mitigee"
+            raisons = [r["raison"]] if r.get("raison") else []
+            for k, (n2, why2) in enumerate((voile(r, med_et, med_fw), crepuscule(r))):
+                if n2:
+                    if k == 0:                          # le voile remplace le simple compte d'étoiles du tri
+                        raisons = [x for x in " ; ".join(raisons).split(" ; ") if x and "étoiles (<" not in x]
+                    raisons.append(why2)
+                    niv = "nette" if "nette" in (niv, n2) else "mitigee"
+            if niv:
+                r["raison"], r["niveau"] = " ; ".join(raisons), niv
                 flagged.append(r)
                 continue
             why = []
@@ -250,12 +297,35 @@ def classer(allrows, prm):
     return flagged, limites[:20], (dict(ref[0]) if ref else None)
 
 
+def ajouter_contexte(rows, ranges, ses):
+    """Hauteur du Soleil, de la Lune et de la cible pour chaque pose (numéro de fichier de la conversion -> pose
+    d'origine de sa session, dans l'ordre des noms)."""
+    from .. import ciel
+    par_nom = {s.get("name"): s for s in ses}
+    cache = {}
+    for r in rows:
+        try:
+            num = int(r["fichier"])
+            rg = next(g for g in ranges if g["de"] <= num <= g["a"])
+            s = par_nom.get(rg["session"])
+            if s is None:
+                continue
+            if s["path"] not in cache:
+                cache[s["path"]] = inventory.lights_of(s["path"])
+            r.update(ciel.contexte_pose(cache[s["path"]][num - rg["de"]]))
+        except (KeyError, ValueError, StopIteration, IndexError):
+            continue
+
+
 class Alignement(Step):
     id, phase, single = "S2", "Stacking", True
     title = "Conversion, alignement et tri du fond de ciel"
     help = ("Siril convertit les poses et calcule leur alignement. L'appli repère ensuite les poses suspectes : fond "
             "du ciel deux fois plus clair que les autres (Lune, aube, pollution passagère), nettement plus clair que la "
-            "normale, ou ayant perdu la plupart de leurs étoiles (voile nuageux). Rien n'est écarté ici : tu décides à l'étape suivante.")
+            "normale, voilées (buée, nuage fin : des étoiles perdues, aussi fines, sans fond plus clair ; une pose voilée a un "
+            "fond plus sombre, que la pondération du stack prendrait pour une meilleure pose), ou prises au crépuscule "
+            "(hauteur du Soleil calculée d'après la date et le lieu de chaque pose). Rien n'est écarté ici : tu décides à "
+            "l'étape suivante.")
     params = [P("facteur", "Fond trop clair : seuil (x la médiane de la nuit)", "float", 2.0, 1.2, 4, 0.1,
                 help="signale les poses au fond au moins 2 fois plus clair que la pose typique de la nuit (Lune, aube, "
                      "gros nuage) ; plus bas = plus sévère"),
@@ -287,7 +357,7 @@ class Alignement(Step):
                     "(seul le tri du fond est recalculé).")
         else:
             self._convert_register(ctx, proc, ses, dev)
-        r = self._tri(ctx, prm, proc, ranges, start)
+        r = self._tri(ctx, prm, proc, ranges, start, ses)
         if self._cal_info:
             r["info"] = self._cal_info + r.get("info", [])
         elif not any(calib_signature(s) for s in ses):
@@ -338,7 +408,7 @@ class Alignement(Step):
         import json
         (proc / "sessions.json").write_text(json.dumps([[s["path"], calib_signature(s)] for s in ses]))
 
-    def _tri(self, ctx, prm, proc, ranges, start):
+    def _tri(self, ctx, prm, proc, ranges, start, ses=()):
         seq = proc / "combined_.seq"
         plages = ",".join(f"{r['de']}-{r['a']}" for r in ranges)
         args = [seq, "--facteur", prm["facteur"], "--z", prm["z"]]
@@ -347,6 +417,7 @@ class Alignement(Step):
         txt = ctx.py("tri_fond_ciel.py", args, cwd=proc)
         with open(proc / "tri_fond_ciel.csv", encoding="utf-8") as f:
             allrows = list(csv.DictReader(f))
+        ajouter_contexte(allrows, ranges, ses)
         rows, limites, ref = classer(allrows, prm)
         info = [l for l in txt.splitlines() if l.strip() and not l.startswith(("unselect", "puis", "Tableau", "index("))
                 and not l.lstrip()[:1].isdigit()][:8]
