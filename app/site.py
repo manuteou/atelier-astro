@@ -153,6 +153,7 @@ def publier(depot, dest=None, titre="", log=print):
     if _git(["diff", "--cached", "--quiet"], d, log).returncode != 0:
         _git(["-c", "user.name=Atelier astro", "-c", "user.email=atelier@localhost", "commit", "-q", "-m",
               f"Site mis à jour le {datetime.now():%Y-%m-%d %H:%M}"], d, log)
+    _git(["branch", "-M", "main"], d, log)       # un vieux git crée « master » malgré « init -b main »
     # envoi à chaque fois : un envoi précédent a pu échouer (mauvaise adresse, connexion) après le commit
     r = _git(["push", "-u", "origin", "main"], d, log)
     if r.returncode != 0:
