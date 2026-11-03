@@ -150,18 +150,16 @@ def publier(depot, dest=None, titre="", log=print):
     elif r.stdout.strip() != depot:
         _git(["remote", "set-url", "origin", depot], d, log)
     _git(["add", "-A"], d, log)
-    if _git(["diff", "--cached", "--quiet"], d, log).returncode == 0:
-        log("site : rien de nouveau à publier")
-        res["publie"] = "inchangé"
-        return res
-    _git(["-c", "user.name=Atelier astro", "-c", "user.email=atelier@localhost", "commit", "-q", "-m",
-          f"Site mis à jour le {datetime.now():%Y-%m-%d %H:%M}"], d, log)
+    if _git(["diff", "--cached", "--quiet"], d, log).returncode != 0:
+        _git(["-c", "user.name=Atelier astro", "-c", "user.email=atelier@localhost", "commit", "-q", "-m",
+              f"Site mis à jour le {datetime.now():%Y-%m-%d %H:%M}"], d, log)
+    # envoi à chaque fois : un envoi précédent a pu échouer (mauvaise adresse, connexion) après le commit
     r = _git(["push", "-u", "origin", "main"], d, log)
     if r.returncode != 0:
         raise ValueError("envoi refusé par le dépôt : vérifie l'adresse et que tu es connecté à GitHub sur ce PC "
                          "(un premier « git push » à la main ouvre la fenêtre de connexion). Détail : "
                          + (r.stderr.strip().splitlines() or ["?"])[-1])
-    res["publie"] = "envoyé"
+    res["publie"] = "inchangé" if "up-to-date" in (r.stdout + r.stderr) else "envoyé"
     return res
 
 

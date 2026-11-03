@@ -98,7 +98,12 @@ try:
     import subprocess as _sp
     nu = tmp / "depot.git"
     _sp.run(["git", "init", "--bare", "-q", str(nu)], check=True)
-    rp = site.publier(f"file://{nu}", dsite, "Test galerie", log=lambda *a: None)
+    try:                                       # 1er envoi vers une adresse fausse : commit fait, envoi refusé
+        site.publier(f"file://{tmp}/inexistant.git", dsite, "Test galerie", log=lambda *a: None)
+        raise AssertionError("envoi vers un dépôt inexistant accepté")
+    except ValueError:
+        pass
+    rp = site.publier(f"file://{nu}", dsite, "Test galerie", log=lambda *a: None)    # corrigé : doit vraiment envoyer
     assert rp["publie"] == "envoyé", rp
     lst = _sp.run(["git", "--git-dir", str(nu), "ls-tree", "-r", "--name-only", "main"], capture_output=True, text=True).stdout
     assert "index.html" in lst and "img/ngc-7380/colorise.jpg" in lst, lst
