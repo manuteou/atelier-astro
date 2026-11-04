@@ -60,7 +60,7 @@ function remplir() {
   if (!g) return;
   g.innerHTML = "";
   const f = filtre.trim().toLowerCase();
-  const liste = data.cibles.filter(c => !f || [c.cible, c.type, ...c.travaux.map(t => `${t.lieu} ${t.date}`)]
+  const liste = data.cibles.filter(c => !f || [c.cible, c.nom_usuel, c.type, ...c.travaux.map(t => `${t.lieu} ${t.date}`)]
     .join(" ").toLowerCase().includes(f));
   if (!liste.length) {
     g.append(h("div", { class: "muted" }, data.cibles.length ? "Aucune cible ne correspond." :
@@ -74,6 +74,7 @@ function remplir() {
         h("span", { class: "muted" }, "pas d'image")),
       h("div", { class: "ex-leg" },
         h("b", {}, c.cible),
+        c.nom_usuel ? h("span", { class: "ex-usuel" }, c.nom_usuel) : null,
         h("span", { class: "muted small" }, [TYPE[c.type] || c.type, t0.lieu, t0.date || t0.modifie].filter(Boolean).join(" · ")),
         h("span", { class: "small" },
           c.travaux.length > 1 ? `${c.travaux.length} traitements` : "",
@@ -84,7 +85,7 @@ function remplir() {
 function detail(c) {
   const box = $("#explorer");
   box.innerHTML = "";
-  box.append(barre(c.cible, grille));
+  box.append(barre(c.nom_usuel ? `${c.cible} — ${c.nom_usuel}` : c.cible, grille));
   for (const t of c.travaux) {
     const f = t.faits || {};
     const infos = [t.lieu && `lieu : ${t.lieu}`, (t.date || t.modifie) && `nuit(s) : ${t.date || "—"}`,

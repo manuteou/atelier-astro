@@ -72,6 +72,8 @@ try:
     assert len(cibles["SH2132"]["travaux"]) == 1
     t = cibles["NGC7380"]["travaux"][0]
     assert (t["lieu"], t["date"]) == ("Buc", "2026-09-25"), t
+    assert cibles["NGC7380"]["nom_usuel"] == "Nébuleuse du Sorcier", "nom usuel (table, la fiche de test n'a pas de sous-titre)"
+    assert cibles["SH2132"]["nom_usuel"] == "Nébuleuse du Lion" and cibles["IC1396A"]["nom_usuel"] == "Trompe d'éléphant"
     assert [i["genre"] for i in t["images"]] == ["colorise", "naturel", "stack_brut", "partage"], t["images"]
     assert t["fiches"] and t["faits"]["integration"] == "3 h 23" and t["faits"]["appareil"] == "ZWO Seestar S50", t["faits"]
     assert cibles["IC1396A"]["travaux"][0]["images"][0]["version"] == 3, "la dernière version d'abord"

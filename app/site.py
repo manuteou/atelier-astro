@@ -98,7 +98,8 @@ def construire(dest=None, titre="", log=print):
                             "fiche": fiches[0] if fiches else None})
             log(f"site : {c['cible']} ({len(imgs)} image(s){', fiche' if fiches else ''})")
         if travaux:
-            cibles.append({"cible": c["cible"], "slug": sc, "type": c.get("type") or "", "travaux": travaux,
+            cibles.append({"cible": c["cible"], "nom": c.get("nom_usuel") or "", "slug": sc, "type": c.get("type") or "",
+                           "travaux": travaux,
                            "couverture": travaux[0]["images"][0]["vignette"] if travaux[0]["images"] else None})
     # fichiers d'une cible retirée depuis : supprimés (le dossier du site n'appartient qu'à l'appli)
     for sous in ("img", "fiches"):
@@ -193,6 +194,8 @@ a { color:var(--accent2); }
 .carte img { width:100%; height:100%; object-fit:cover; display:block; }
 .carte .leg { padding:10px 12px 12px; }
 .carte b { font-size:16px; display:block; }
+.usuel { color:#c9bcff; font-size:14px; display:block; }
+h2 .usuel { font-size:17px; font-weight:400; margin-top:2px; }
 .muted { color:var(--muted); font-size:13px; }
 .retour { display:inline-block; margin-bottom:12px; }
 h2 { margin:6px 0 2px; font-size:24px; }
@@ -227,10 +230,10 @@ document.getElementById("sous").textContent = `${D.cibles.length} cible(s) · mi
 function grille() {
   return `<div class="grille">${D.cibles.map(c => { const t = c.travaux[0];
     return `<a class="carte" href="#${esc(c.slug)}"><div class="img">${c.couverture ? `<img loading="lazy" src="${esc(c.couverture)}" alt="${esc(c.cible)}">` : ""}</div>
-      <div class="leg"><b>${esc(c.cible)}</b><span class="muted">${[T[c.type] || c.type, t.lieu, t.date].filter(Boolean).map(esc).join(" · ")}</span></div></a>`; }).join("")}</div>`;
+      <div class="leg"><b>${esc(c.cible)}</b>${c.nom ? `<span class="usuel">${esc(c.nom)}</span>` : ""}<span class="muted">${[T[c.type] || c.type, t.lieu, t.date].filter(Boolean).map(esc).join(" · ")}</span></div></a>`; }).join("")}</div>`;
 }
 function page(c) {
-  return `<a class="retour" href="#">← Toutes les cibles</a><h2>${esc(c.cible)}</h2>` + c.travaux.map((t, k) =>
+  return `<a class="retour" href="#">← Toutes les cibles</a><h2>${esc(c.cible)}${c.nom ? `<span class="usuel">${esc(c.nom)}</span>` : ""}</h2>` + c.travaux.map((t, k) =>
     `<section class="travail"><h3>${[t.lieu, t.date].filter(Boolean).map(esc).join(" — ")}</h3>
      <div class="muted">${t.infos.map(esc).join(" · ")}</div>
      <div class="images">${t.images.map((im, i) => `<figure data-t="${k}" data-i="${i}"><img loading="lazy" src="${esc(im.vignette)}" alt="${esc(im.titre)}"><figcaption>${esc(im.titre)}</figcaption></figure>`).join("")}</div>
@@ -242,7 +245,7 @@ function ouvrir(c, k, i) {
   lb = document.createElement("div"); lb.className = "lb";
   lb.innerHTML = `<div class="bar"><span></span><button data-a="-1">←</button><button data-a="1">→</button><button data-a="x">Fermer ✕</button></div><div class="corps"><img alt=""></div>`;
   const voir = (j) => { i = (j + ims.length) % ims.length; lb.querySelector("img").src = ims[i].src;
-    lb.querySelector("span").textContent = `${c.cible} — ${ims[i].titre} (${i + 1}/${ims.length})`; };
+    lb.querySelector("span").textContent = `${c.cible}${c.nom ? " (" + c.nom + ")" : ""} — ${ims[i].titre} (${i + 1}/${ims.length})`; };
   lb.addEventListener("click", (e) => { const a = e.target.dataset.a; if (a === "x" || e.target.classList.contains("corps")) fermer(); else if (a) voir(i + +a); });
   lb._k = (e) => { if (e.key === "Escape") fermer(); else if (e.key === "ArrowRight") voir(i + 1); else if (e.key === "ArrowLeft") voir(i - 1); };
   document.addEventListener("keydown", lb._k);

@@ -21,6 +21,55 @@ VIGNETTES = Path(os.environ.get("ATELIER_VIGNETTES") or config.CONFIG_PATH.paren
 GENRES = (("colorise", "Colorisée"), ("naturel", "Naturelle"), ("stack_brut", "Stack brut"), ("partage", "Partage"))
 
 
+# noms usuels des objets les plus photographiés (clé : désignation en majuscules sans espace ni tiret) ; la fiche PDF
+# d'un travail, si elle existe, a la priorité (son sous-titre est le nom usuel choisi par l'utilisateur)
+NOMS_USUELS = {
+    "M1": "Nébuleuse du Crabe", "M8": "Nébuleuse de la Lagune", "M11": "Amas du Canard sauvage", "M13": "Amas d'Hercule",
+    "M16": "Nébuleuse de l'Aigle", "M17": "Nébuleuse Oméga", "M20": "Nébuleuse Trifide", "M27": "Nébuleuse de l'Haltère",
+    "M31": "Galaxie d'Andromède", "M33": "Galaxie du Triangle", "M42": "Grande nébuleuse d'Orion", "M43": "Nébuleuse de De Mairan",
+    "M45": "Les Pléiades", "M51": "Galaxie du Tourbillon", "M57": "Nébuleuse de l'Anneau", "M63": "Galaxie du Tournesol",
+    "M64": "Galaxie de l'Œil noir", "M76": "Petite Haltère", "M78": "Nébuleuse M78", "M81": "Galaxie de Bode",
+    "M82": "Galaxie du Cigare", "M97": "Nébuleuse de la Chouette", "M101": "Galaxie du Moulinet", "M104": "Galaxie du Sombrero",
+    "NGC7000": "Nébuleuse de l'Amérique du Nord", "IC5070": "Nébuleuse du Pélican", "NGC6960": "Petite Dentelle du Cygne",
+    "C34": "Petite Dentelle du Cygne", "NGC6992": "Grande Dentelle du Cygne", "NGC6995": "Grande Dentelle du Cygne",
+    "C33": "Grande Dentelle du Cygne", "NGC281": "Nébuleuse Pac-Man", "IC1396": "Nébuleuse de la Trompe d'éléphant",
+    "IC1396A": "Trompe d'éléphant", "IC1805": "Nébuleuse du Cœur", "IC1848": "Nébuleuse de l'Âme",
+    "IC410": "Nébuleuse des Têtards", "IC63": "Fantôme de Cassiopée", "IC59": "Nébuleuse de Gamma Cas",
+    "NGC7380": "Nébuleuse du Sorcier", "SH2132": "Nébuleuse du Lion", "NGC2237": "Nébuleuse de la Rosette",
+    "NGC2244": "Nébuleuse de la Rosette", "IC434": "Nébuleuse de la Tête de Cheval", "B33": "Tête de Cheval",
+    "NGC2024": "Nébuleuse de la Flamme", "NGC7635": "Nébuleuse de la Bulle", "NGC6888": "Nébuleuse du Croissant",
+    "IC2177": "Nébuleuse de la Mouette", "NGC1499": "Nébuleuse de la Californie", "IC405": "Nébuleuse de l'Étoile flamboyante",
+    "NGC6946": "Galaxie du Feu d'artifice", "NGC7293": "Nébuleuse de l'Hélice", "NGC869": "Double amas de Persée",
+    "NGC884": "Double amas de Persée", "NGC2264": "Nébuleuse du Cône", "NGC6543": "Nébuleuse de l'Œil de chat",
+    "IC443": "Nébuleuse de la Méduse", "SH2240": "Nébuleuse Spaghetti", "NGC7023": "Nébuleuse de l'Iris",
+    "SH2155": "Nébuleuse de la Grotte", "NGC4565": "Galaxie de l'Aiguille", "IC1318": "Nébuleuse du Papillon",
+    "SH2101": "Nébuleuse de la Tulipe", "NGC6820": "Nébuleuse NGC 6820", "NGC7822": "Nébuleuse NGC 7822",
+    "SH2171": "Nébuleuse NGC 7822", "IC342": "Galaxie cachée", "NGC891": "Galaxie NGC 891", "NGC6914": "Nébuleuse NGC 6914",
+    "SH2119": "Nébuleuse Sh2-119", "NGC1333": "Nébuleuse NGC 1333", "NGC2359": "Casque de Thor",
+}
+_NOMS_PDF = {}
+
+
+def nom_usuel(cible, fiches=()):
+    """Nom usuel : sous-titre de la fiche PDF (« NGC 7380 — Nébuleuse du Sorcier · Fiche… »), sinon la table."""
+    for f in fiches:
+        try:
+            st = f.stat()
+            k = (str(f), st.st_mtime_ns)
+            if k not in _NOMS_PDF:
+                import pypdfium2 as pdfium
+                doc = pdfium.PdfDocument(str(f))
+                t = doc[0].get_textpage().get_text_range()[:300]
+                doc.close()
+                m = re.search(r"—\s*(.+?)\s*·\s*Fiche", t)
+                _NOMS_PDF[k] = m.group(1).strip()[:80] if m else ""
+            if _NOMS_PDF[k]:
+                return _NOMS_PDF[k]
+        except Exception:
+            continue
+    return NOMS_USUELS.get(_cle(cible), "")
+
+
 def racine():
     cfg = config.load()
     r = str(cfg.get("dossier_finaux") or "").strip()
@@ -113,7 +162,8 @@ def _travail(dossier, base):
     lieu, date = _lieu_date(dossier)
     quand = max(f.stat().st_mtime for f in fichiers)
     cible = _cible_de(dossier, fichiers)
-    return {"id": rel(dossier), "cible": cible, "cle": _cle(cible), "lieu": lieu, "date": date,
+    return {"id": rel(dossier), "cible": cible, "cle": _cle(cible), "nom_usuel": nom_usuel(cible, pdfs),
+            "lieu": lieu, "date": date,
             "modifie": datetime.fromtimestamp(quand).strftime("%Y-%m-%d"), "images": images,
             "fiches": [{"chemin": rel(f), "nom": f.name} for f in pdfs],
             "notes": rel(notes) if notes else None, "faits": faits,
@@ -145,6 +195,7 @@ def explorer():
     for c in cibles.values():
         c["travaux"].sort(key=lambda t: t["modifie"], reverse=True)
         c["cible"] = c["travaux"][0]["cible"]
+        c["nom_usuel"] = next((t["nom_usuel"] for t in c["travaux"] if t["nom_usuel"]), "")
         c["couverture"] = next((t["couverture"] for t in c["travaux"] if t["couverture"]), None)
         c["modifie"] = c["travaux"][0]["modifie"]
         c["type"] = next((t["faits"].get("type") for t in c["travaux"] if t["faits"].get("type")), "")
