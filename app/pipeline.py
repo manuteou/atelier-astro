@@ -164,7 +164,13 @@ def write_notes(p):
     f = p.state["facts"]
     L = [f"# {p.state['target']} — NOTES", "",
          f"- Type de cible : {p.type}", f"- Appareil : {p.state.get('device', '')}",
-         f"- Mode filtres : {p.mode}", f"- Projet créé : {p.state.get('created')}", "", "## Sessions"]
+         f"- Mode filtres : {p.mode}", f"- Projet créé : {p.state.get('created')}"]
+    if p.state.get("source") == "stack":
+        si = f.get("stack_importe") or {}
+        L.append(f"- Départ : image déjà empilée {p.state.get('stack_origine')}"
+                 + (f" ({si['poses']} poses)" if si.get("poses") else "")
+                 + (f", {', '.join(si['remarques'])}" if si.get("remarques") else ""))
+    L += ["", "## Sessions"]
     for s in p.state.get("sessions", []):
         L.append(f"- {s.get('name')} : {s.get('count')} poses, filtre {s.get('filter')}, {s.get('exptime')} s, {s.get('date')}")
     L += ["", "## Étapes validées (réglages retenus)"]

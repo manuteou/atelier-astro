@@ -14,7 +14,8 @@ MODE = sys.argv[1] if len(sys.argv) > 1 else "A"
 TTYPE = sys.argv[2] if len(sys.argv) > 2 else "nebuleuse"
 MULTI = len(sys.argv) > 3 and sys.argv[3] in ("multi", "multi2")   # ajoute une session S30 Pro (focale 160 mm, tournée)
 MULTI2 = len(sys.argv) > 3 and sys.argv[3] == "multi2"             # … avec les deux filtres (LP et IRCUT) sur le S30
-GENERIC = len(sys.argv) > 3 and sys.argv[3] == "generique"   # caméra astro quelconque + calibration + outils Siril
+GENERIC = len(sys.argv) > 3 and sys.argv[3] == "generique"
+STACK = len(sys.argv) > 3 and sys.argv[3] == "stack"          # projet parti d'une image déjà empilée (stack du Seestar)   # caméra astro quelconque + calibration + outils Siril
 tmp = Path(tempfile.mkdtemp(prefix="atelier_"))
 os.environ["ATELIER_ROOT"] = str(tmp / "Astrophoto")
 os.environ["ATELIER_SIRIL"] = str(HERE / "mock_siril.py")
@@ -88,82 +89,110 @@ if GENERIC:
     dev = m["nouveaux"][0]
     assert dev == "ZWOASI533MCPro_400" and m["profils"][dev]["pixel"] == 3.76
     ok(c.post("/api/materiel", json={"profils": {dev: {**m["profils"][dev], "nom": "ASI533MC + lunette 80/400", "ouverture": 80}}}))
-else:
+elif not STACK:
     ses = ok(c.get("/api/sessions"))
     print("sessions :", [(s["name"], s["count"], s["filter"], s.get("device")) for s in ses])
     NAME = ok(c.post("/api/projects", json={"target": "data", "type": TTYPE, "device": "S50 Pro",
                                              "sessions": [s["path"] for s in ses]}))["name"]
 
-p1 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "S1")
-assert any("lightpollutionmap.info" in l for l in p1["summary"]) or GENERIC, p1["summary"]
-_, vs1 = run("S1", [{"mode": MODE, "bortle": 7}]); val("S1")
-assert any("Bortle 7" in l for l in vs1[0]["info"]), vs1[0]["info"][:3]
-if not GENERIC:
-    assert any(int(x["bortle"]) == 7 for x in config.load().get("sites", [])), config.load().get("sites")
+if STACK:
+    # stack du Seestar : RVB 16 bits avec piédestal (BIAS), STACKCNT, en-têtes de lieu ; S1 à S3 sont sautées
+    import numpy as _np
+    from astropy.io import fits as _fits
+    from tests.make_data import render, sky
+    neb, st_, _u = render(sky(1), "S50", 720, 960)
+    _rgb = _np.stack([0.05 + c * neb + st_ for c in (1.0, 0.6, 0.55)])
+    _rgb = _rgb + _np.random.default_rng(2).normal(0, 0.002, _rgb.shape)
+    _h = _fits.Header()
+    _h.update(BIAS=1113, STACKCNT=40, EXPTIME=10.0, TOTALEXP=10.0, FILTER="IRCUT", OBJECT="NGC 7000",
+              INSTRUME="Seestar S50", FOCALLEN=260.0, XPIXSZ=2.9, SITELAT=48.85, SITELONG=2.35, RA=314.7, DEC=44.5,
+              **{"DATE-OBS": "2026-09-13T21:10:00"})
+    _sf = tmp / "Stacked_40_NGC 7000_10.0s_IRCUT.fit"
+    _fits.PrimaryHDU((_np.clip(_rgb + 1113 / 65535, 0, 1) * 65535).astype(_np.uint16), _h).writeto(_sf)
+    an = ok(c.post("/api/stack/analyse", json={"path": str(_sf)}))
+    assert an["canaux"] == 3 and an["poses"] == 40 and an["integration_s"] == 400 and an["bias"] == 1113, an
+    r = ok(c.post("/api/projects/depuis_stack", json={"path": str(_sf), "target": "data", "type": TTYPE}))
+    NAME = r["name"]
+    assert any("piédestal" in x for x in r["remarques"]), r
+    proj = ok(c.get(f"/api/projects/{NAME}"))
+    na = {s["id"]: s["applies"] for s in proj["steps"]}
+    assert not na["S1"] and not na["S2"] and not na["S3"] and not na["S3B"] and na["S4"] and na["P0"], na
+    _d = _fits.getdata(str(tmp / "Astrophoto" / NAME / proj["state"]["files"]["stack"]))
+    assert _d.dtype.kind == "f" and abs(float(_np.median(_d[1])) - (0.05 + 0.6 * float(_np.median(neb)))) < 0.01, \
+        float(_np.median(_d[1]))
+    assert proj["state"]["source"] == "stack" and _sf.exists(), "l'original n'est pas touché"
+    print("  projet parti d'une image empilée : S1-S3 sautées, piédestal retiré, original intact")
+else:
     p1 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "S1")
-    assert p1["dyn"]["bortle"] == 7, p1["dyn"]
-    print("  Bortle 7 retenu pour ce lieu, proposé d'office ensuite")
-st, vs = run("S2")
-r = ok(c.post(f"/api/projects/{NAME}/steps/S2/run", json={"variants": [{"z": 4}]}))
-j = wait(r["job"])
-assert any("repris tels quels" in l for l in j["log"]), "la conversion aurait dû être reprise"
-print("  S2 relancé : conversion et alignement repris, tri recalculé")
-st, vs = run("S2"); val("S2")
-flag = vs[0]["extra"]["groups"]["S50"]["flagged"] if MULTI else vs[0]["extra"]["flagged"]
-print("  poses signalées :", [(r["index_seq_1"], r["raison"]) for r in flag])
-if MODE != "C":
-    assert any(r["fichier"] == "4" for r in flag), "la pose voilée aurait dû être signalée"
-proj = ok(c.get(f"/api/projects/{NAME}"))
-s3 = next(s for s in proj["steps"] if s["id"] == "S3")
-niv = [(r["fichier"], r["niveau"]) for g in s3["poses"] for r in g["poses"]]
-print("  niveaux du tri :", niv[:8], "· pose typique :", [g["reference"]["fichier"] for g in s3["poses"] if g["reference"]])
-assert all(n in ("nette", "mitigee", "limite") for _, n in niv)
-if MODE != "C" and not GENERIC:       # mode C : seules les IRCUT ; générique : fond calibré, rapports plus forts
-    assert ("4", "nette") in niv and ("6", "mitigee") in niv and ("7", "limite") in niv, niv
-g0 = next(g for g in s3["poses"] if g["reference"])
-thumb = c.get(f"/api/projects/{NAME}/pose", params={"fichier": g0["reference"]["fichier"], "dev": g0["dev"]})
-assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg", thumb.status_code
-dyn = s3["dyn"]
-print("  exclusions proposées :", dyn)
-st, vs = run("S3", [dyn]); val("S3")
-if os.environ.get("MOCK_CADRE_GEANT"):
-    assert any("cadrage maximal démesuré" in l for l in vs[0]["info"]), vs[0]["info"][:6]
-    print("  ", next(l for l in vs[0]["info"] if "démesuré" in l)[:170])
-if os.environ.get("MOCK_FRAMING"):
-    assert any("recalé sur le principal" in l for l in vs[0]["info"]), vs[0]["info"]
-    print("  ", next(l for l in vs[0]["info"] if "recalé" in l)[:160])
-if os.environ.get("MOCK_CRASH_WEIGHT"):
-    assert any("sans pondération" in l for l in vs[0]["info"]), vs[0]["info"]
-    print("  plantage de Siril : empilement refait sans pondération, signalé")
-if MULTI:
-    st, vs = run("S3B", [{"mode": "combinaison", "poids": 1.0}, {"mode": "combinaison", "poids": 0.5},
-                         {"mode": "principal"}, {"mode": "secondaire"}])
-    if os.environ.get("MOCK_TROUS"):
-        assert not any("sans extraction de fond" in l for v in vs for l in v["info"]), "GraXpert doit passer sur un stack troué"
-        assert any("contient des données" in l for l in vs[0]["info"]), vs[0]["info"][:3]
-        print("  stack S50 troué : vides remplis pour GraXpert, faible couverture signalée")
-    if os.environ.get("MOCK_GRAXPERT_NAN"):
-        assert all(any("utilisé sans extraction de fond" in l for l in v["info"]) for v in vs[:2]), vs[0]["info"][:4]
-        print("  GraXpert cassé sur le S30 : stack utilisé sans extraction de fond, signalé")
-    if MODE == "B":
-        from astropy.io import fits as _f
-        main_f = "LP" if TTYPE == "nebuleuse" else "IRCUT"
-        for v in vs:
-            o = v["outputs"]
-            assert set(o) == {"stack", "stack2"}, o
-            h1, h2 = (_f.getheader(str(tmp / "Astrophoto" / NAME / o[k])) for k in ("stack", "stack2"))
-            assert (h1["NAXIS1"], h1["NAXIS2"]) == (h2["NAXIS1"], h2["NAXIS2"]), "les deux stacks du mode B doivent avoir la même taille"
-            assert h1["FILTER"] == main_f and h2["FILTER"] != main_f, (h1["FILTER"], h2["FILTER"])
-        fl = vs[0]["extra"]["multi"]["filtres"]
-        print("  mode B, appareils par filtre :", fl)
-        s30_has = {"LP", "IRCUT"} if MULTI2 else {"LP"}
-        assert all(("S30" in fl[F]) == (F in s30_has) for F in fl), fl
-        assert fl[main_f][0] == "S50" and vs[2]["extra"]["multi"]["filtres"][main_f] == ["S50"], "principal seul"
-    if "S30" in vs[0]["extra"]["multi"]["appareils"]:
-        det = vs[0]["extra"]["multi"]["appareils"]["S30"]
-        print("  alignement S30 → S50 :", {k: det[k] for k in ("echelle", "rotation_deg", "etoiles", "rms_px", "poids_relatif")})
-        assert abs(det["echelle"] - 1.625) < 0.02 and abs(abs(det["rotation_deg"]) - 3) < 0.3, det
-    val("S3B", 0)
+    assert any("lightpollutionmap.info" in l for l in p1["summary"]) or GENERIC, p1["summary"]
+    _, vs1 = run("S1", [{"mode": MODE, "bortle": 7}]); val("S1")
+    assert any("Bortle 7" in l for l in vs1[0]["info"]), vs1[0]["info"][:3]
+    if not GENERIC:
+        assert any(int(x["bortle"]) == 7 for x in config.load().get("sites", [])), config.load().get("sites")
+        p1 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "S1")
+        assert p1["dyn"]["bortle"] == 7, p1["dyn"]
+        print("  Bortle 7 retenu pour ce lieu, proposé d'office ensuite")
+    st, vs = run("S2")
+    r = ok(c.post(f"/api/projects/{NAME}/steps/S2/run", json={"variants": [{"z": 4}]}))
+    j = wait(r["job"])
+    assert any("repris tels quels" in l for l in j["log"]), "la conversion aurait dû être reprise"
+    print("  S2 relancé : conversion et alignement repris, tri recalculé")
+    st, vs = run("S2"); val("S2")
+    flag = vs[0]["extra"]["groups"]["S50"]["flagged"] if MULTI else vs[0]["extra"]["flagged"]
+    print("  poses signalées :", [(r["index_seq_1"], r["raison"]) for r in flag])
+    if MODE != "C":
+        assert any(r["fichier"] == "4" for r in flag), "la pose voilée aurait dû être signalée"
+    proj = ok(c.get(f"/api/projects/{NAME}"))
+    s3 = next(s for s in proj["steps"] if s["id"] == "S3")
+    niv = [(r["fichier"], r["niveau"]) for g in s3["poses"] for r in g["poses"]]
+    print("  niveaux du tri :", niv[:8], "· pose typique :", [g["reference"]["fichier"] for g in s3["poses"] if g["reference"]])
+    assert all(n in ("nette", "mitigee", "limite") for _, n in niv)
+    if MODE != "C" and not GENERIC:       # mode C : seules les IRCUT ; générique : fond calibré, rapports plus forts
+        assert ("4", "nette") in niv and ("6", "mitigee") in niv and ("7", "limite") in niv, niv
+    g0 = next(g for g in s3["poses"] if g["reference"])
+    thumb = c.get(f"/api/projects/{NAME}/pose", params={"fichier": g0["reference"]["fichier"], "dev": g0["dev"]})
+    assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg", thumb.status_code
+    dyn = s3["dyn"]
+    print("  exclusions proposées :", dyn)
+    st, vs = run("S3", [dyn]); val("S3")
+    if os.environ.get("MOCK_CADRE_GEANT"):
+        assert any("cadrage maximal démesuré" in l for l in vs[0]["info"]), vs[0]["info"][:6]
+        print("  ", next(l for l in vs[0]["info"] if "démesuré" in l)[:170])
+    if os.environ.get("MOCK_FRAMING"):
+        assert any("recalé sur le principal" in l for l in vs[0]["info"]), vs[0]["info"]
+        print("  ", next(l for l in vs[0]["info"] if "recalé" in l)[:160])
+    if os.environ.get("MOCK_CRASH_WEIGHT"):
+        assert any("sans pondération" in l for l in vs[0]["info"]), vs[0]["info"]
+        print("  plantage de Siril : empilement refait sans pondération, signalé")
+    if MULTI:
+        st, vs = run("S3B", [{"mode": "combinaison", "poids": 1.0}, {"mode": "combinaison", "poids": 0.5},
+                             {"mode": "principal"}, {"mode": "secondaire"}])
+        if os.environ.get("MOCK_TROUS"):
+            assert not any("sans extraction de fond" in l for v in vs for l in v["info"]), "GraXpert doit passer sur un stack troué"
+            assert any("contient des données" in l for l in vs[0]["info"]), vs[0]["info"][:3]
+            print("  stack S50 troué : vides remplis pour GraXpert, faible couverture signalée")
+        if os.environ.get("MOCK_GRAXPERT_NAN"):
+            assert all(any("utilisé sans extraction de fond" in l for l in v["info"]) for v in vs[:2]), vs[0]["info"][:4]
+            print("  GraXpert cassé sur le S30 : stack utilisé sans extraction de fond, signalé")
+        if MODE == "B":
+            from astropy.io import fits as _f
+            main_f = "LP" if TTYPE == "nebuleuse" else "IRCUT"
+            for v in vs:
+                o = v["outputs"]
+                assert set(o) == {"stack", "stack2"}, o
+                h1, h2 = (_f.getheader(str(tmp / "Astrophoto" / NAME / o[k])) for k in ("stack", "stack2"))
+                assert (h1["NAXIS1"], h1["NAXIS2"]) == (h2["NAXIS1"], h2["NAXIS2"]), "les deux stacks du mode B doivent avoir la même taille"
+                assert h1["FILTER"] == main_f and h2["FILTER"] != main_f, (h1["FILTER"], h2["FILTER"])
+            fl = vs[0]["extra"]["multi"]["filtres"]
+            print("  mode B, appareils par filtre :", fl)
+            s30_has = {"LP", "IRCUT"} if MULTI2 else {"LP"}
+            assert all(("S30" in fl[F]) == (F in s30_has) for F in fl), fl
+            assert fl[main_f][0] == "S50" and vs[2]["extra"]["multi"]["filtres"][main_f] == ["S50"], "principal seul"
+        if "S30" in vs[0]["extra"]["multi"]["appareils"]:
+            det = vs[0]["extra"]["multi"]["appareils"]["S30"]
+            print("  alignement S30 → S50 :", {k: det[k] for k in ("echelle", "rotation_deg", "etoiles", "rms_px", "poids_relatif")})
+            assert abs(det["echelle"] - 1.625) < 0.02 and abs(abs(det["rotation_deg"]) - 3) < 0.3, det
+        val("S3B", 0)
 _, vs4 = run("S4", [{"zones": "bras:150,100,120,90"}]); val("S4")
 assert any("Projection : doubler les poses" in l for l in vs4[0]["info"]), [l for l in vs4[0]["info"] if "S/N" in l][:4]
 assert vs4[0]["images"][0].split("/")[-1].startswith("projection_"), vs4[0]["images"]
@@ -372,14 +401,14 @@ if not GENERIC:
     from app.project import Project
     from app.steps.export import tech_facts
     tf = tech_facts(Project.load(tmp / "Astrophoto" / NAME))
-    assert "Bortle 7" in tf["ciel"], tf
+    assert "Bortle 7" in tf["ciel"] or STACK, tf          # projet parti d'un stack : pas de S1, Bortle du lieu s'il est connu
     print("  fiche technique, ciel :", tf["ciel"])
 # finalisation : dossier « nom - lieu - date », PDF et images gardés, dossier de travail supprimé, poses intactes
 if os.environ.get("ATELIER_SANS_FINAL"):
     print("Dossier de test :", tmp); raise SystemExit(0)
 pl = ok(c.get(f"/api/projects/{NAME}/finalize"))
 print("finalisation prévue :", pl["nom"], [k["name"] for k in pl["garde"]], f"{pl['taille_liberee'] / 1e6:.1f} Mo libérés")
-assert pl["nom"].startswith("NGC 7000 - ") and pl["nom"].endswith("2026-09-12 au 2026-09-13"), pl["nom"]
+assert pl["nom"].startswith("NGC 7000 - ") and pl["nom"].endswith("2026-09-13" if STACK else "2026-09-12 au 2026-09-13"), pl["nom"]
 assert any(k["name"].endswith(".pdf") for k in pl["garde"]) and any("colorise" in k["name"] for k in pl["garde"])
 assert all(k["name"].startswith("NGC7000_") for k in pl["garde"]), [k["name"] for k in pl["garde"]]
 assert c.post(f"/api/projects/{NAME}/finalize", json={}).status_code == 400          # pas sans confirmation

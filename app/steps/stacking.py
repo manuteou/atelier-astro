@@ -48,6 +48,11 @@ class Inventaire(Step):
     ]
     preview_key = "apercu"
 
+
+    def applies(self, p):
+        if p.state.get("source") == "stack":
+            return False, "projet parti d'une image déjà empilée : rien à empiler"
+        return True, ""
     def summary(self, p):
         """Poses disponibles par appareil et par filtre, avec le temps d'intégration."""
         from .. import sites
@@ -333,6 +338,11 @@ class Alignement(Step):
                 help="signale les poses dont le fond s'écarte nettement de sa variation normale dans la nuit (et d'au moins "
                      "15 %) : voiles nuageux discrets ; 3 = sévère, 5 = défaut, 8 = seulement les écarts flagrants")]
 
+
+    def applies(self, p):
+        if p.state.get("source") == "stack":
+            return False, "projet parti d'une image déjà empilée : rien à empiler"
+        return True, ""
     def run(self, ctx, prm, tag):
         p = ctx.p
         if not is_multi(p):
@@ -465,6 +475,11 @@ class Empilement(Step):
     canonical = {}
     interaction = "poses"
 
+
+    def applies(self, p):
+        if p.state.get("source") == "stack":
+            return False, "projet parti d'une image déjà empilée : rien à empiler"
+        return True, ""
     def ready(self, p):
         st = p.state["steps"].get("S2", {})
         return (st.get("status") in ("done", "stale"), "valider d'abord l'alignement (S2)")
@@ -909,6 +924,9 @@ def qualite_ciel(ctx, out):
     from .. import ciel
     p = ctx.p
     ses = [s for s in _sessions_for_mode(p) if ciel.mesurable(s)]
+    if p.state.get("source") == "stack":
+        return ["Ciel non mesuré : projet parti d'une image déjà empilée (la mesure se fait sur les poses brutes)."], \
+            None, None
     if not ses:
         return ["Ciel non mesuré : pas de session IRCUT (les poses LP, filtre bi-bande, ne se comparent pas à un "
                 "SQM)."], None, None

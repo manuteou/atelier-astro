@@ -256,6 +256,16 @@ séparation est moins nette : l'appli le signale.
   Position, taille et opacité réglables ; la signature est retenue pour les projets suivants. Le FIT et le TIFF ne
   sont jamais signés, et les contrôles de correspondance des exports se font sur l'image vierge.
 
+## Partir d'une image déjà empilée
+
+« Nouveau projet » → onglet « Partir d'une image empilée » : un stack du Seestar (`Stacked_…fit`), d'un autre logiciel
+(Siril, DSS…) ou d'un ancien projet. « Analyser » lit son en-tête (taille, couleur, nombre de poses et intégration,
+filtre, appareil, date, lieu, piédestal, astrométrie) ; le projet créé saute l'inventaire, l'alignement et
+l'empilement et reprend à la mesure du stack (S4, facultative) puis au cadrage (P0). L'image est copiée dans le projet
+en 32 bits flottants (l'original n'est jamais modifié) ; le piédestal du capteur (BIAS des stacks du Seestar) est
+retiré, sinon il fausse la calibration des couleurs et le fond. La qualité du ciel n'est pas mesurée (il faut les
+poses brutes) ; la classe de Bortle du lieu est reprise si elle est connue.
+
 ## Mes travaux (exploration)
 
 Le bouton « Mes travaux » (barre du haut, ou page d'accueil) ouvre une galerie des travaux terminés : une carte par

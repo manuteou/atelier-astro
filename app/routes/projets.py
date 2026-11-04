@@ -81,6 +81,19 @@ def create_project(data: dict = Body(...)):
     return {"name": p.state["name"]}
 
 
+@router.post("/api/stack/analyse")
+def stack_analyse(data: dict = Body(...)):
+    from .. import depuis_stack
+    return depuis_stack.analyser(data.get("path"))
+
+
+@router.post("/api/projects/depuis_stack")
+def stack_projet(data: dict = Body(...)):
+    from .. import depuis_stack
+    p, info, rem = depuis_stack.creer(config.load()["astro_root"], data.get("path"), data.get("target"), data.get("type"))
+    return {"name": p.state["name"], "remarques": rem}
+
+
 @router.get("/api/projects/{name}")
 def get_project(name: str):
     p = proj(name)

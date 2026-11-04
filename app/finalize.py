@@ -71,6 +71,8 @@ def plan(p, name=None):
     delete = [{"label": "Dossier de travail du projet (empilements, essais, aperçus, scripts)", "path": str(p.root),
                "size": _size(p.root)}]
     for s in p.state.get("sessions", []):
+        if s.get("stack_importe"):
+            continue
         for d in SESSION_TMP:
             t = Path(s.get("path", "")) / d
             if t.is_dir():

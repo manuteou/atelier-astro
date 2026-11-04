@@ -36,7 +36,7 @@ APR, ANN = 6, 10             # rayon d'ouverture et début de l'anneau de fond, 
 
 
 def mesurable(session):
-    return "LP" not in str(session.get("filter") or "").upper()
+    return "LP" not in str(session.get("filter") or "").upper() and not session.get("stack_importe")
 
 
 # ---------------------------------------------------------------- catalogue

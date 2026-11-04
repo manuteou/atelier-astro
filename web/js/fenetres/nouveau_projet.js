@@ -10,7 +10,8 @@ export async function dlgNewProject(tab = "import") {
   const common = h("div", {},
     h("div", { class: "row", style: "display:flex;gap:12px" }, h("div", { class: "field", style: "flex:2" }, h("label", {}, "Cible"), target),
       h("div", { class: "field", style: "flex:1" }, h("label", {}, "Type"), type)));
-  const onglets = [["import", "Importer un dossier (tri automatique)"], ["sessions", "Sessions déjà rangées"]];
+  const onglets = [["import", "Importer un dossier (tri automatique)"], ["sessions", "Sessions déjà rangées"],
+    ["stack", "Partir d'une image empilée"]];
   const tabs = h("div", { class: "seg", style: "margin-bottom:14px;display:inline-flex;flex-wrap:wrap" },
     onglets.map(([k, l]) => h("button", { class: tab === k ? "on" : "", onclick: () => dlgNewProject(k) }, l)));
   const body = h("div", {}, tabs);
@@ -33,6 +34,35 @@ export async function dlgNewProject(tab = "import") {
     }, "Analyser");
     body.append(h("p", { class: "muted" }, "Indique n'importe quel dossier (même en vrac, avec sous-dossiers, plusieurs appareils, filtres et nuits mélangés). L'appli lit l'en-tête de chaque pose (tout appareil à caméra couleur) et range tout en sessions : une cible + un appareil + un filtre + une nuit. Les darks, flats et offsets trouvés sont rangés avec les poses qui leur correspondent (même appareil, même taille, même durée pour les darks, même filtre pour les flats) et serviront à la calibration ; les empilements sont ignorés."),
       h("div", { class: "field" }, h("label", {}, "Dossier à importer"), h("div", { class: "row", style: "display:flex;gap:8px" }, path, analyse)),
+      common, res);
+  } else if (tab === "stack") {
+    const path = h("input", { type: "text", placeholder: "ex. D:\\Astrophoto\\C 15\\Stacked_22_C 15_60.0s_IRCUT.fit (copie le chemin depuis l'Explorateur)",
+      value: localStorage.getItem("atelier.stack") || "" });
+    const res = h("div", {});
+    const go = h("button", { onclick: async () => {
+      res.innerHTML = "";
+      localStorage.setItem("atelier.stack", path.value.trim());
+      let a;
+      try { a = await api("POST", "/api/stack/analyse", { path: path.value }); } catch (e) { toast(e.message, true); return; }
+      if (!target.value && a.object) target.value = a.object;
+      const hm = (s) => s ? `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, "0")}` : "?";
+      res.append(h("div", { class: "banner info", style: "margin:10px 0" },
+        h("b", {}, a.name), ` · ${a.taille[0]}×${a.taille[1]} px · ${a.canaux === 3 ? "couleur" : "monochrome"}`,
+        a.poses ? ` · ${a.poses} poses${a.exptime ? " de " + a.exptime + " s" : ""} (${hm(a.integration_s)})` : " · nombre de poses inconnu",
+        ` · filtre ${a.filter_name || a.filter || "?"} · ${a.instrument || "appareil inconnu"}${a.focal ? " (" + a.focal + " mm)" : ""}`,
+        a.date ? ` · ${a.date.slice(0, 10)}` : "", a.bias ? ` · piédestal ${a.bias} (retiré à l'import)` : "",
+        a.plate_solve ? " · astrométrie présente" : ""),
+        h("div", { class: "muted small" }, "L'image est copiée dans le projet (l'original n'est pas touché). L'inventaire, l'alignement et l'empilement sont sautés : le traitement reprend à la mesure du stack (S4, facultative) puis au cadrage (P0)."),
+        h("div", { class: "actions" }, h("button", { onclick: async () => {
+          try {
+            const r = await api("POST", "/api/projects/depuis_stack", { path: path.value, target: target.value, type: type.value });
+            closeDlg(); S.edit = {}; await loadProjects(r.name);
+            toast("Projet créé à partir de l'image empilée" + (r.remarques.length ? " : " + r.remarques.join(", ") : ""));
+          } catch (e) { toast(e.message, true); }
+        } }, "Créer le projet")));
+    } }, "Analyser");
+    body.append(h("p", { class: "muted" }, "Pour repartir directement sur le traitement sans réempiler : un stack du Seestar (Stacked_…fit), d'un autre logiciel (Siril, DSS…) ou d'un ancien projet."),
+      h("div", { class: "field" }, h("label", {}, "Image empilée (FITS)"), h("div", { class: "row", style: "display:flex;gap:8px" }, path, go)),
       common, res);
   } else {
     let ses = [];
