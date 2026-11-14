@@ -1,6 +1,6 @@
 # Réglages et données personnelles (chemins, matériel, presets) : propres à chaque installation
 config.json
-config.bak
+config.bak*
 presets/*.json
 
 # Caches de l'appli (vignettes de « Mes travaux », etc.)
