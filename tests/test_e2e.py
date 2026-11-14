@@ -154,7 +154,14 @@ else:
     assert thumb.status_code == 200 and thumb.headers["content-type"] == "image/jpeg", thumb.status_code
     dyn = s3["dyn"]
     print("  exclusions proposées :", dyn)
+    assert dyn.get("ponderation") in ("noise", "nbstars"), dyn
+    if MODE == "A" and not MULTI and not GENERIC:
+        dyn = {**dyn, "ponderation": "wfwhm"}                 # choix explicite : doit arriver tel quel à Siril
     st, vs = run("S3", [dyn]); val("S3")
+    assert any(l.startswith(("Poids des poses :", "Mode B : empilements sans pondération")) for l in vs[0]["info"]), vs[0]["info"]
+    if dyn["ponderation"] == "wfwhm":
+        assert any("finesse des étoiles" in l for l in vs[0]["info"]), vs[0]["info"]
+        assert any("-weight=wfwhm" in f.read_text() for f in (tmp / "Astrophoto" / NAME / "_scripts").glob("*stack*.ssf"))
     if os.environ.get("MOCK_CADRE_GEANT"):
         assert any("cadrage maximal démesuré" in l for l in vs[0]["info"]), vs[0]["info"][:6]
         print("  ", next(l for l in vs[0]["info"] if "démesuré" in l)[:170])
@@ -216,7 +223,11 @@ if MULTI and not os.environ.get("MOCK_GRAXPERT_NAN"):
     proj = ok(c.get(f"/api/projects/{NAME}"))
     assert not next(s for s in proj["steps"] if s["id"] == "P1")["applies"], "P1 doit être sans objet après GraXpert par stack"
 else:
-    run("P1"); val("P1")
+    _, vs1p = run("P1", [{"smoothing": 1.0}, {"smoothing": 0.5}]); val("P1")
+    assert all(any(l.startswith("Fond retiré : amplitude") for l in v["info"]) and len(v["images"]) == 1 for v in vs1p), vs1p[0]["info"]
+    assert (tmp / "Astrophoto" / NAME / vs1p[0]["images"][0]).stat().st_size > 2000
+    p1m = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P1")
+    assert [v["smoothing"] for v in p1m["default_variants"]] == [1.0, 0.8, 0.5], p1m["default_variants"]
 if GENERIC:
     st, vs = run("P2", [{"type": "large", "correction": False}]); val("P2")
     assert any("PCC" in l for l in vs[0]["info"]), vs[0]["info"]
@@ -284,6 +295,19 @@ fine = {"temperature": 0.4, "teinte": -0.2, "rotation": 12, "saturation": 0.3, "
 st, vs = run("P8F", [fine]); val("P8F")
 assert "G_fin" in ok(c.get(f"/api/projects/{NAME}"))["state"]["files"]
 run("P9"); val("P9")
+p10 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P10")
+g4 = ok(c.get(f"/api/projects/{NAME}"))["state"]["facts"].get("grain_p4_pct")
+assert g4 is not None and g4 < 0, "la baisse du grain en P4 doit être retenue"
+fort = g4 <= -60
+assert (p10["default_variants"][0]["dn"] == 0.1) == fort and bool(p10["summary"]) == fort, (g4, p10["default_variants"], p10["summary"])
+_, vs10 = run("P10", [{"dn": 0.5}])
+assert any("débruitage cumulé fort" in l for l in vs10[0]["info"]) == fort, (g4, vs10[0]["info"])
+print(f"  P10 : grain déjà baissé de {abs(g4)} % en P4 ->", "alerte de cumul et forces basses" if fort else "pas d'alerte")
+from app.project import Project as _P  # noqa: E402
+from app.steps import STEP_MAP as _SM  # noqa: E402
+_pp = _P.load(tmp / "Astrophoto" / NAME)                    # cas « déjà fort » (grain -70 % en P4), sans rien enregistrer
+_pp.state["facts"]["grain_p4_pct"] = -70
+assert _SM["P10"].meta(_pp)["default_variants"][0]["dn"] == 0.1 and "70 %" in _SM["P10"].summary(_pp)[0]
 run("P10", [{"dn": 0.3}]); val("P10")
 run("P11", [{"liste": "vert 200 150 20\nremplace 300 100 15"}]); val("P11")
 st12, vs12 = run("P12", [{"rotation": "90", "partage": 400, "signer": "partage_hd", "titre": "NGC 7000 · test",

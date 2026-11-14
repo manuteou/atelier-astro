@@ -158,10 +158,17 @@ def _check_crop(data, hdr, out, x, y, w, h):
 
 class GraXpert(Step):
     id, phase = "P1", "1 · Linéaire"
-    help = ("Retire les dégradés du fond du ciel (pollution lumineuse, Lune). Sur une galaxie, vérifie sur un zoom "
-            "que les bras extérieurs et le halo sont toujours là ; sinon, monte le lissage. L'outil se choisit dans "
-            "Réglages > Outils (GraXpert, Siril, commande personnalisée, ou aucun).")
-    params = [P("smoothing", "Lissage", "float", 1.0, 0, 1, 0.05)]
+    help = ("Retire les dégradés du fond du ciel (pollution lumineuse, Lune). Trois lissages sont proposés : plus il "
+            "est bas, plus le fond retiré suit les détails, au risque d'emporter de la nébulosité faible ou le halo "
+            "d'une galaxie. Sous chaque variante, l'image « fond retiré » montre exactement ce que l'outil a enlevé : "
+            "elle doit ressembler à un dégradé lisse. Si on y devine la forme de la nébuleuse ou de la galaxie, le "
+            "lissage est trop faible : prends la variante au-dessus. L'outil se choisit dans Réglages > Outils "
+            "(GraXpert, Siril, commande personnalisée, ou aucun).")
+    params = [P("smoothing", "Lissage", "float", 1.0, 0, 1, 0.05,
+                help="1 = fond très lisse (le plus prudent) · 0.8 = moyen · 0.5 = suit les gradients complexes, à "
+                     "surveiller sur l'image du fond retiré")]
+    default_variants = [{"smoothing": 1.0}, {"smoothing": 0.8}, {"smoothing": 0.5}]
+    kind = "creatif"
     preview_key = "bge"
     canonical = {"bge": "{T}_BGE.fit"}
     optional = True
@@ -186,12 +193,55 @@ class GraXpert(Step):
 
     def run(self, ctx, prm, tag):
         out = ctx.out(tag, "BGE")
-        tool(ctx, ctx.p.file("crop"), out, outils.commandes(ctx.cfg, "fond", prm["smoothing"]), "fond")
+        src = ctx.p.file("crop")
+        tool(ctx, src, out, outils.commandes(ctx.cfg, "fond", prm["smoothing"]), "fond")
         d, h = fitsio.read(out)
-        return {"outputs": {"bge": ctx.rel(out)}, "info": [five_boxes(d, h)]}
+        info, images = [five_boxes(d, h)], []
+        try:
+            lignes, img = fond_retire(fitsio.read(src)[0], d, h, ctx.p.root / "apercus" / f"{ctx.p.T}_P1_r{ctx.run_no}{tag}_fond_retire.jpg")
+            info += lignes
+            images.append(ctx.rel(img))
+        except Exception as e:                       # le diagnostic ne doit jamais faire échouer l'extraction
+            info.append(f"image du fond retiré indisponible : {e}")
+        return {"outputs": {"bge": ctx.rel(out)}, "info": info, "images": images}
 
     def notes(self, p, st):
         return f"Extraction du fond : {outils.nom(config.load(), 'fond')}, lissage {st['params'].get('smoothing')}"
+
+
+def fond_retire(avant, apres, hdr, out_jpg):
+    """Ce que l'extraction du fond a enlevé (avant - après), en image et en chiffres. Un fond retiré sain est un
+    dégradé lisse ; s'il contient des structures à moyenne échelle, c'est du signal de l'objet qui part avec.
+    Retourne (lignes d'info, chemin de l'image)."""
+    import cv2
+    from PIL import Image
+    if avant.shape != apres.shape:
+        raise ValueError("tailles différentes avant et après")
+    k = max(1, max(avant.shape[1:]) // 600)
+    M = np.stack([cv2.resize(np.ascontiguousarray(a - b, np.float32), None, fx=1 / k, fy=1 / k, interpolation=cv2.INTER_AREA)
+                  for a, b in zip(avant, apres)])
+    M = np.stack([cv2.GaussianBlur(c, (0, 0), 3) for c in M])            # le fond retiré, sans le grain
+    L = M.mean(0)
+    lo, hi = np.percentile(L, [1, 99])
+    ciel = max(float(np.median(avant.mean(0)[::k, ::k])), 1e-9)
+    amp = (hi - lo) / ciel * 100
+    # part du fond retiré qui n'est PAS un dégradé simple (polynôme d'ordre 2) : structures à moyenne échelle
+    H, W = L.shape
+    yy, xx = np.mgrid[0:H, 0:W]
+    x, y = (xx / W - 0.5).ravel(), (yy / H - 0.5).ravel()
+    A = np.stack([np.ones_like(x), x, y, x * x, x * y, y * y], 1)
+    coef, *_ = np.linalg.lstsq(A, L.ravel(), rcond=None)
+    res = L.ravel() - A @ coef
+    part = float(res.std() / max(L.std(), 1e-12)) * 100
+    v = np.clip((M - lo) / max(hi - lo, 1e-9), 0, 1)                      # même échelle pour les trois couleurs
+    Path(out_jpg).parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(fitsio.to_uint8(fitsio.display(v, hdr))).save(str(out_jpg), "JPEG", quality=88)
+    lignes = [f"Fond retiré : amplitude {amp:.0f} % du niveau du ciel ; {part:.0f} % de sa variation n'est pas un simple "
+              "dégradé (structures à moyenne échelle)."]
+    if part > 45 and amp > 3:
+        lignes.append("À VÉRIFIER sur l'image « fond retiré » : il contient des structures, pas seulement un dégradé. Si "
+                      "on y reconnaît la forme de l'objet, du signal part avec le fond : prends un lissage plus élevé.")
+    return lignes, Path(out_jpg)
 
 
 def principal_profile(p):
@@ -330,12 +380,13 @@ class BXT(Step):
 
 class NXTLin(Step):
     id, phase, kind = "P4", "1 · Linéaire", "creatif"
-    help = ("Débruitage sur l'image entière, étoiles comprises. 0.5 doux, 0.8 net, 0.9 fort (risque d'aspect "
-            "« plastique ») : c'est le zoom qui décide. Si tu comptes traiter l'Hα et l'OIII séparément (étape bicolore, "
-            "filtre LP), reste modéré (0.5 à 0.8) : l'OIII pourra être débruité à part ensuite. Outil : Réglages > Outils "
+    help = ("Débruitage sur l'image entière, étoiles comprises. 0.4 léger, 0.6 moyen, 0.8 net ; au-delà, risque "
+            "d'aspect « plastique » : c'est le zoom qui décide. Ce n'est pas le seul débruitage : un débruitage final "
+            "(P10) est proposé avant l'export, et le bicolore (P8B) débruite l'OIII à part. Mieux vaut deux passes "
+            "modérées qu'une passe forte ici : ce qui est lissé maintenant ne revient pas. Outil : Réglages > Outils "
             "(NoiseXTerminator, GraXpert, Siril…).")
-    params = [P("dn", "Force", "float", 0.8, 0, 1, 0.05)]
-    default_variants = [{"dn": 0.5}, {"dn": 0.8}, {"dn": 0.9}]
+    params = [P("dn", "Force", "float", 0.6, 0, 1, 0.05)]
+    default_variants = [{"dn": 0.4}, {"dn": 0.6}, {"dn": 0.8}]
     preview_key = "nxt"
     canonical = {"nxt": "{T}_nxt.fit"}
     optional = True
@@ -356,8 +407,17 @@ class NXTLin(Step):
         src = ctx.p.latest("bxt", "spcc", "bge", "crop")
         tool(ctx, src, out, outils.commandes(ctx.cfg, "debruitage", prm["dn"]), "debruitage")
         d, _ = fitsio.read(out)
+        na, nb = checks.noise_file(src), checks.noise_file(out)
         return {"outputs": {"nxt": ctx.rel(out)},
-                "info": [f"bruit de fond par canal R/V/B (ADU) : {noise(d)}"] + checks.noise_change(src, out, "après débruitage", "baisse")}
+                "info": [f"bruit de fond par canal R/V/B (ADU) : {noise(d)}"] + checks.noise_change(src, out, "après débruitage", "baisse"),
+                "extra": {"grain_pct": round((nb / na - 1) * 100) if na > 0 else None}}
+
+    def on_validate(self, p, var):
+        g = (var.get("extra") or {}).get("grain_pct")
+        if g is None:
+            p.state["facts"].pop("grain_p4_pct", None)
+        else:
+            p.state["facts"]["grain_p4_pct"] = g          # lu par le débruitage final (P10) pour ne pas cumuler
 
     def notes(self, p, st):
         return f"Débruitage linéaire : {outils.nom(config.load(), 'debruitage')} {st['params'].get('dn')}, image entière"

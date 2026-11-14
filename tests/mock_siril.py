@@ -187,7 +187,7 @@ def cmd(line):
             print("progress: Échec du traitement de la séquence. Vérifier les log., 0.00%", flush=True)
             log("L'exécution du script a échoué.")
             sys.exit(1)
-        if "-weight=noise" in args and ("-filter-included" in opts or os.environ.get("MOCK_CRASH_WEIGHT")):
+        if any(str(a).startswith("-weight=") for a in args) and ("-filter-included" in opts or os.environ.get("MOCK_CRASH_WEIGHT")):
             log("Calcul des pondérations en fonction du bruit...")
             print("Segmentation fault (access violation)", flush=True)
             sys.exit(139)

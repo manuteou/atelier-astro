@@ -470,7 +470,17 @@ class Empilement(Step):
     params = [P("filter_round", "Filtre de rondeur (k)", "float", 2.5, 1.5, 4, 0.1),
               P("filter_fwhm", "Filtre FWHM (k, 0 = aucun)", "float", 0, 0, 4, 0.1),
               P("exclure", "Poses à écarter (index de séquence)", "text", "",
-                help="rempli par les cases ci-dessus ; modifiable à la main (virgules)")]
+                help="rempli par les cases ci-dessus ; modifiable à la main (virgules)"),
+              P("ponderation", "Poids de chaque pose dans l'empilement", "choice", "noise",
+                choices=[["noise", "Bruit du fond (ciel le plus noir = plus de poids)"],
+                         ["nbstars", "Nombre d'étoiles (transparence : pénalise les voiles)"],
+                         ["wfwhm", "Finesse des étoiles (pénalise le flou)"],
+                         ["aucune", "Aucun : toutes les poses comptent autant"]],
+                help="Bruit du fond : le réglage historique, bon quand la Lune ou l'éclairage varient. Attention : une "
+                     "pose voilée (buée, nuage fin) a un fond plus sombre, donc elle y pèse PLUS lourd. Nombre "
+                     "d'étoiles : une pose voilée perd des étoiles, elle pèse moins ; proposé d'office quand le tri a vu "
+                     "des voiles. Finesse : favorise les poses les plus nettes (vent, turbulence). Les deux derniers "
+                     "utilisent les mesures de l'alignement, sans calcul en plus.")]
     preview_key = "stack"
     canonical = {}
     interaction = "poses"
@@ -488,9 +498,13 @@ class Empilement(Step):
         key = "index_seq_1" if p_base(p) == 1 else "index_seq_0"
         net = lambda rows: ",".join(str(r[key]) for r in rows if r.get("niveau", "nette") == "nette")
         g = p.state["facts"].get("groups")
+        # des voiles vus par le tri (même légers, donc gardés) : la pondération par le bruit les favoriserait
+        toutes = [r for gg in (g or {}).values() for r in (gg.get("flagged") or []) + (gg.get("limites") or [])] \
+            if g else (p.state["facts"].get("flagged") or []) + (p.state["facts"].get("limites") or [])
+        pond = "nbstars" if any("voile" in str(r.get("raison") or "") for r in toutes) else "noise"
         if g:
-            return {"exclure": " ; ".join(f"{d}: " + net(gg["flagged"]) for d, gg in g.items())}
-        return {"exclure": net(p.state["facts"].get("flagged") or [])}
+            return {"exclure": " ; ".join(f"{d}: " + net(gg["flagged"]) for d, gg in g.items()), "ponderation": pond}
+        return {"exclure": net(p.state["facts"].get("flagged") or []), "ponderation": pond}
 
     def poses(self, p):
         """Poses à montrer dans le choix : par appareil, signalées (nettes, mitigées), limites et pose typique."""
@@ -584,7 +598,13 @@ class Empilement(Step):
                                "l'empilement est impossible. Causes probables : alignement raté à l'étape S2 pour cet "
                                "appareil (trop peu d'étoiles), ou filtre de rondeur trop strict (essaie 3 ou 3.5).")
         info = cadre_info + [f"Poses alignées et retenues : {n} sur {total}" + (f" ({len(excl)} écartées à la main)" if excl else "")]
-        stack_cmd = "rej 3 3 -norm=addscale -output_norm -rgb_equal -maximize -feather=5 -weight=noise"
+        pond = prm.get("ponderation") or "noise"
+        stack_cmd = "rej 3 3 -norm=addscale -output_norm -rgb_equal -maximize -feather=5" + \
+            ("" if pond == "aucune" else f" -weight={pond}")
+        info.append("Poids des poses : " + {"noise": "bruit du fond (ciel le plus noir = plus de poids)",
+                                            "nbstars": "nombre d'étoiles (les poses voilées pèsent moins)",
+                                            "wfwhm": "finesse des étoiles (les poses floues pèsent moins)",
+                                            "aucune": "aucun, toutes les poses comptent autant"}[pond] + ".")
         outputs, extra = {}, {}
         filters = [inventory.norm_filter(fits.getheader(str(f)).get("FILTER"), "") for f in rfiles] if p.mode == "B" else []
         seul = next(iter(set(filters))) if dev and len(set(filters)) == 1 and filters[0] in ("LP", "IRCUT") else None
@@ -622,7 +642,8 @@ class Empilement(Step):
                    "IRCUT": [f"select r_combined_ {b} {last}", f"unselect r_combined_ {b} {lp_last}"]}
             dropped = [stack_retry(ctx, proc, "r_combined_", cmd_b, f"../{T}_{key}_stack", f"stack_modeB_{key}",
                                    pre=sel[key], post=[f"select r_combined_ {b} {last}"]) for key in ("LP", "IRCUT")]
-            info.append("Mode B : empilements sans pondération par le bruit (Siril plante avec une sélection de poses) : "
+            info = [l for l in info if not l.startswith("Poids des poses :")]
+            info.append("Mode B : empilements sans pondération (Siril plante avec une sélection de poses) : "
                         "les poses comptent toutes autant.")
             f_lp, f_ir = _find(p.root, f"{T}_LP_stack"), _find(p.root, f"{T}_IRCUT_stack")
             if not f_lp or not f_ir:
@@ -727,7 +748,7 @@ CRASH = ("3221225477", "0xc0000005", "segmentation", "-1073741819")
 
 def stack_retry(ctx, folder, seq, stack_cmd, out, name, pre=(), post=()):
     """stack, avec des replis si Siril refuse ou plante, chacun signalé :
-    1. plantage (violation d'accès, au calcul des pondérations) -> sans pondération par le bruit ;
+    1. plantage (violation d'accès, au calcul des pondérations) -> sans pondération ;
     2. refus -> sans -maximize ni -feather.
     Renvoie la liste des options retirées (vide si le premier essai a réussi)."""
     tries = [[], ["-weight="], ["-maximize", "-feather="], ["-maximize", "-feather=", "-weight="]]
@@ -751,7 +772,7 @@ def stack_retry(ctx, folder, seq, stack_cmd, out, name, pre=(), post=()):
     raise last
 
 
-DROP_TEXT = {"-weight=": "sans pondération par le bruit (les poses comptent toutes autant)",
+DROP_TEXT = {"-weight=": "sans pondération (les poses comptent toutes autant)",
              "-maximize": "sans cadrage maximal", "-feather=": "sans adoucissement des bords"}
 
 
