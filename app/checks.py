@@ -45,16 +45,21 @@ def cut_objects(data, hdr, rect):
     L = _lum_display(fitsio.autostretch(data), hdr)
     H, W = L.shape
     out = []
-    # objet étendu : zone lumineuse à grande échelle (nébuleuse, galaxie)
-    big = ndi.gaussian_filter(L, max(H, W) / 80)
+    # objet étendu : zone lumineuse à grande échelle (nébuleuse, galaxie). Le lissage (1/80 du grand côté) se fait
+    # sur une image réduite : même résultat à quelques pixels près, 30 fois plus vite
+    import cv2
+    q = max(1, int(max(H, W) / 80 / 6))
+    small = cv2.resize(L.astype(np.float32), (max(W // q, 1), max(H // q, 1)), interpolation=cv2.INTER_AREA) if q > 1 else L
+    big = cv2.GaussianBlur(np.ascontiguousarray(small, np.float32), (0, 0), max(H, W) / 80 / q, borderType=cv2.BORDER_REFLECT)
     valid = big[big > 0]
     if valid.size:
         thr = np.percentile(valid, 97)
         lab, n = ndi.label(big > thr)
         if n:
-            sizes = ndi.sum(np.ones_like(L), lab, range(1, n + 1))
+            sizes = np.bincount(lab.ravel())[1:]
             k = int(np.argmax(sizes)) + 1
             ys, xs = np.nonzero(lab == k)
+            ys, xs = ys * q + q // 2, xs * q + q // 2
             bx0, bx1, by0, by1 = xs.min(), xs.max(), ys.min(), ys.max()
             inside = (bx0 >= x and bx1 <= x + w and by0 >= y and by1 <= y + h)
             if not inside:
@@ -62,8 +67,8 @@ def cut_objects(data, hdr, rect):
                 out.append(f"ATTENTION la partie la plus lumineuse de l'objet (x {bx0}–{bx1}, y {by0}–{by1}) dépasse du "
                            f"cadre : {100 * (1 - part):.0f} % en est coupé.")
     # étoiles très brillantes : halo coupé par le bord
-    Ls = ndi.gaussian_filter(L, 2)
-    peaks = (Ls == ndi.maximum_filter(Ls, 15)) & (Ls > np.percentile(Ls, 99.95))
+    Ls = cv2.GaussianBlur(np.ascontiguousarray(L, np.float32), (0, 0), 2, borderType=cv2.BORDER_REFLECT)
+    peaks = (Ls == cv2.dilate(Ls, np.ones((15, 15), np.uint8))) & (Ls > np.percentile(Ls, 99.95))
     ys, xs = np.nonzero(peaks)
     order = np.argsort(-Ls[ys, xs])[:5]
     for i in order:
@@ -134,11 +139,25 @@ def noise(data):
     return n(data)
 
 
+_NOISE = {}
+
+
+def noise_file(path):
+    """Grain du fond d'un fichier, gardé en mémoire tant que le fichier ne change pas : l'image « avant » est la même
+    pour toutes les variantes d'une étape, inutile de la relire et de la remesurer à chaque fois."""
+    from pathlib import Path
+    st = Path(path).stat()
+    k = (str(path), st.st_mtime_ns, st.st_size)
+    if k not in _NOISE:
+        if len(_NOISE) > 64:
+            _NOISE.clear()
+        _NOISE[k] = noise(fitsio.read(path)[0])
+    return _NOISE[k]
+
+
 def noise_change(before, after, label, expect=None):
     """Évolution du grain du fond entre deux fichiers du même domaine (linéaire / étiré)."""
-    a, _ = fitsio.read(before)
-    b, _ = fitsio.read(after)
-    na, nb = noise(a), noise(b)
+    na, nb = noise_file(before), noise_file(after)
     if na <= 0:
         return []
     ch = (nb / na - 1) * 100

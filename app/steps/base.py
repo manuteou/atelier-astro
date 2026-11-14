@@ -136,18 +136,15 @@ def make_previews(ctx, step, var, idx):
         return
     linear = var.get("linear", step.linear)
     base = p.root / "apercus" / f"{p.T}_{step.id}_r{ctx.run_no}{LETTERS[idx]}"
-    meta = fitsio.preview(src, f"{base}.jpg", linear, width=ctx.cfg.get("preview_width", 1200))
+    loaded = fitsio.read(src)                 # une seule lecture pour l'aperçu, le zoom et les mesures
+    meta = fitsio.preview(src, f"{base}.jpg", linear, width=ctx.cfg.get("preview_width", 1200), loaded=loaded)
     var["previews"] = {"main": p.rel(f"{base}.jpg"), "size": [meta["w"], meta["h"]], "scale": meta["scale"],
                        "source": p.rel(src), "linear": linear}
     if p.state.get("zoom"):
-        fitsio.preview(src, f"{base}_zoom.jpg", linear, zoom=p.state["zoom"])
+        fitsio.preview(src, f"{base}_zoom.jpg", linear, zoom=p.state["zoom"], loaded=loaded, params=meta["params"])
         var["previews"]["zoom"] = p.rel(f"{base}_zoom.jpg")
     try:
-        data, _ = fitsio.read(src)
-        if linear:
-            var["stats"] = fitsio.stats(data)
-        else:
-            var["stats"] = fitsio.stats(data)
+        var["stats"] = fitsio.stats(loaded[0])
     except Exception:
         pass
 

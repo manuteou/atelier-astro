@@ -159,35 +159,43 @@ def to_uint8(rgb):
     return (np.clip(rgb, 0, 1) * 255 + 0.5).astype(np.uint8)
 
 
-def preview(src, out_jpg, linear, width=1200, zoom=None, quality=85):
+def preview(src, out_jpg, linear, width=1200, zoom=None, quality=85, loaded=None, params=None):
     """Aperçu JPEG d'un FITS. linear=True : autostretch lié (comme `autostretch -linked`), sinon tel quel.
     zoom = (x, y, w, h) en coordonnées affichées pleine résolution -> recadrage agrandi.
-    Retourne {"w","h","scale"} : taille pleine résolution et facteur aperçu/pleine résolution."""
-    data, hdr = read(src)
+    loaded = (data, hdr) déjà lus (évite de relire le fichier pour l'aperçu, le zoom et les mesures) ;
+    params = (c0, m) de l'étirement déjà calculés sur l'image entière.
+    L'étirement est appliqué APRÈS le recadrage ou la réduction : seuls les pixels de l'aperçu sont calculés (les
+    réglages de l'étirement, eux, viennent toujours de l'image entière).
+    Retourne {"w","h","scale","params"} : taille pleine résolution, facteur aperçu/pleine résolution, étirement."""
+    import cv2
+    data, hdr = loaded if loaded is not None else read(src)
     H, W = data.shape[1], data.shape[2]
-    if linear:
-        c0, m = autostretch_params(data)
-        data = apply_stretch(data, c0, m)
+    if linear and params is None:
+        params = autostretch_params(data)
     rgb = display(data, hdr)
     if zoom:
         x, y, w, h = [int(v) for v in zoom]
         x, y = max(0, min(x, W - 2)), max(0, min(y, H - 2))
         w, h = max(2, min(w, W - x)), max(2, min(h, H - y))
         rgb = rgb[y:y + h, x:x + w]
+        if linear:
+            rgb = apply_stretch(rgb, *params)
         im = Image.fromarray(to_uint8(rgb))
         k = min(3.0, 600 / max(im.size))
         k = max(k, 1.0)
         im = im.resize((int(im.size[0] * k), int(im.size[1] * k)), Image.LANCZOS)
         scale = k
     else:
-        im = Image.fromarray(to_uint8(rgb))
         scale = 1.0
-        if im.size[0] > width:
-            scale = width / im.size[0]
-            im = im.resize((width, int(im.size[1] * scale)), Image.LANCZOS)
+        if W > width:
+            scale = width / W
+            rgb = cv2.resize(np.ascontiguousarray(rgb, np.float32), (width, int(H * scale)), interpolation=cv2.INTER_AREA)
+        if linear:
+            rgb = apply_stretch(rgb, *params)
+        im = Image.fromarray(to_uint8(rgb))
     Path(out_jpg).parent.mkdir(parents=True, exist_ok=True)
     im.save(str(out_jpg), "JPEG", quality=quality)
-    return {"w": W, "h": H, "scale": scale}
+    return {"w": W, "h": H, "scale": scale, "params": params}
 
 
 def label_strip(paths, labels, out_jpg, height=500):

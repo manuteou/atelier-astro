@@ -189,6 +189,51 @@ def gauss2d(coord, amp, x0, y0, sx, sy, th, c):
                                + cc * (y - y0) ** 2))).ravel()
 
 
+def gauss2d_jac(coord, amp, x0, y0, sx, sy, th, c):
+    """Dérivées analytiques de gauss2d par rapport à ses 7 paramètres (une colonne chacune) : l'ajustement n'a plus
+    à les estimer par différences finies (8 évaluations du modèle par itération)."""
+    x, y = coord
+    X, Y = (x - x0).ravel(), (y - y0).ravel()
+    ct, st = math.cos(th), math.sin(th)
+    s2, c2 = math.sin(2 * th), math.cos(2 * th)
+    ix, iy = 1 / (2 * sx * sx), 1 / (2 * sy * sy)
+    a = ct * ct * ix + st * st * iy
+    b = s2 * (iy - ix) / 2
+    cc = st * st * ix + ct * ct * iy
+    e = np.exp(-(a * X * X + 2 * b * X * Y + cc * Y * Y))
+    g = amp * e
+    J = np.empty((X.size, 7))
+    J[:, 0] = e
+    J[:, 1] = g * (2 * a * X + 2 * b * Y)
+    J[:, 2] = g * (2 * b * X + 2 * cc * Y)
+    dix, diy = -1 / sx ** 3, -1 / sy ** 3                       # d(1/(2s²))/ds
+    J[:, 3] = -g * (ct * ct * dix * X * X + 2 * (-s2 * dix / 2) * X * Y + st * st * dix * Y * Y)
+    J[:, 4] = -g * (st * st * diy * X * X + 2 * (s2 * diy / 2) * X * Y + ct * ct * diy * Y * Y)
+    da, db, dc = s2 * (iy - ix), c2 * (iy - ix), s2 * (ix - iy)
+    J[:, 5] = -g * (da * X * X + 2 * db * X * Y + dc * Y * Y)
+    J[:, 6] = 1.0
+    return J
+
+
+BORNES = ([0, -2, -2, 0.4, 0.4, -math.pi, -1], [10, 2, 2, 7, 7, math.pi, 2])
+
+
+def ajuster(xx, yy, b, p0, r):
+    """Gaussienne elliptique ajustée à une étoile. Chemin rapide : Levenberg-Marquardt sans bornes (MINPACK) avec les
+    dérivées analytiques ; s'il sort des bornes ou échoue, ajustement borné comme avant (même minimum, plus lent)."""
+    bas, haut = BORNES[0], [10, 2, 2, r, r, math.pi, 2]
+    try:
+        p, _ = optimize.curve_fit(gauss2d, (xx, yy), b.ravel(), p0=p0, jac=gauss2d_jac, method="lm", maxfev=400)
+        p[3], p[4] = abs(p[3]), abs(p[4])
+        p[5] = (p[5] + math.pi) % (2 * math.pi) - math.pi
+        if all(lo <= v <= hi for v, lo, hi in zip(p, bas, haut)):
+            return p
+    except (RuntimeError, ValueError):
+        pass
+    p, _ = optimize.curve_fit(gauss2d, (xx, yy), b.ravel(), p0=p0, jac=gauss2d_jac, bounds=(bas, haut), maxfev=400)
+    return p
+
+
 def etoiles(lum, fond, bruit, valide, max_etoiles, r=7):
     H, W = lum.shape
     net = lum - fond
@@ -230,11 +275,7 @@ def etoiles(lum, fond, bruit, valide, max_etoiles, r=7):
         if amp0 <= 0:
             continue
         try:
-            p, _ = optimize.curve_fit(
-                gauss2d, (xx, yy), b.ravel(),
-                p0=(amp0, 0, 0, 1.5, 1.5, 0.0, c0),
-                bounds=([0, -2, -2, 0.4, 0.4, -math.pi, -1], [10, 2, 2, r, r, math.pi, 2]),
-                maxfev=400)
+            p = ajuster(xx, yy, b, (amp0, 0, 0, 1.5, 1.5, 0.0, c0), r)
         except (RuntimeError, ValueError):
             continue
         amp, dx, dy, sx, sy, th, c = p

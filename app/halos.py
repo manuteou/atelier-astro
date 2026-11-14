@@ -67,6 +67,17 @@ def soustraire(img, cx, cy, R, force=1.0, pas=2.0, fondu=0.12):
 def remplir(img, mask, sigma, seed=0):
     """Remplace la zone `mask` (1 = à remplacer) par la moyenne lissée de ses voisins, bord fondu, plus un grain de la
     force du bruit mesuré juste autour (sinon la zone paraît lisse comme du plastique)."""
+    ys, xs = np.nonzero(mask)
+    if ys.size == 0:
+        return img.copy()
+    # tout le calcul tient dans une fenêtre autour de la zone (portée des lissages : 4 sigma) : inutile de lisser
+    # l'image entière pour remplacer un disque de quelques dizaines de pixels
+    g = int(4 * max(sigma, 2) + 40)
+    y0, y1, x0, x1 = max(ys.min() - g, 0), min(ys.max() + g + 1, img.shape[1]), max(xs.min() - g, 0), min(xs.max() + g + 1, img.shape[2])
+    if (y1 - y0, x1 - x0) != img.shape[1:]:
+        out = img.copy()
+        out[:, y0:y1, x0:x1] = remplir(np.ascontiguousarray(img[:, y0:y1, x0:x1]), np.ascontiguousarray(mask[y0:y1, x0:x1]), sigma, seed)
+        return out
     rng = np.random.default_rng(seed)
     m = mask.astype(np.float32)
     w = 1 - m
