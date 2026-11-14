@@ -187,7 +187,7 @@ def auto_fields(p, network=True):
                              "de départ de tout le travail.")
     st = p.state["steps"]
     col = []
-    for sid in ("P8", "P8F"):
+    for sid in ("P8B", "P8", "P8F"):
         if st.get(sid, {}).get("status") == "done":
             col.append(STEP_MAP[sid].notes(p, st[sid]).split(" : ", 1)[-1])
     out["intro_finales"] = ("Les deux versions partagent le même traitement (fond, calibration des couleurs, netteté, débruitage, "

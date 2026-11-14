@@ -19,11 +19,13 @@ class Fusion(Step):
     canonical = {"fusion": "{T}_fusion.fit"}
 
     def ready(self, p):
-        return (p.file("G_final") is not None, "valider d'abord les couleurs (P8)")
+        from .couleurs import calque_couleur
+        return (calque_couleur(p) is not None, "valider (ou passer) d'abord les couleurs (P8)")
 
     def run(self, ctx, prm, tag):
+        from .couleurs import calque_couleur
         p = ctx.p
-        gsrc = p.latest("G_fin", "G_final")
+        gsrc = p.file("G_fin") or calque_couleur(p)
         g, h = fitsio.read(gsrc)
         s = stars_final(p)
         out = ctx.out(tag, "fusion")
@@ -49,7 +51,7 @@ class Fusion(Step):
 class NXTFinal(Step):
     id, phase, kind, optional = "P10", "3 · Couleurs et export", "creatif", True
     help = ("Dernier débruitage, facultatif, avant l'export : 0.2 / 0.4 / 0.6. Il s'ajoute au débruitage linéaire (P4) "
-            "et, le cas échéant, à celui du bicolore : si le grain avait déjà baissé de plus de 60 % en P4, l'appli le "
+            "et, le cas échéant, à celui des couleurs par gaz (P8B) : si le grain avait déjà baissé de plus de 60 % en P4, l'appli le "
             "signale et propose des forces plus basses. Si l'image est déjà propre, passe l'étape. Le même réglage est "
             "appliqué à la version naturelle. Outil : Réglages > Outils.")
     params = [P("dn", "Force", "float", 0.4, 0, 1, 0.05)]

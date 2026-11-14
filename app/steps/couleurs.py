@@ -29,6 +29,17 @@ def couleur_source(p):
     return p.file("bicolore") if bicolore_valide(p) else galaxy_layer(p)
 
 
+def calque_couleur(p):
+    """Calque couleur à fusionner et à régler finement : celui de l'étape Couleurs (P8) si elle est validée, sinon
+    directement les couleurs par gaz (P8B) ou, à défaut, le calque sans étoiles (P8 passée)."""
+    st = p.state["steps"].get("P8", {}).get("status")
+    if st in ("done", "stale") and p.file("G_final"):
+        return p.file("G_final")
+    if st == "skipped":
+        return couleur_source(p)
+    return None
+
+
 def fused_preview(ctx, g_path, tag, name="apercu"):
     g, h = fitsio.read(g_path)
     s = stars_final(ctx.p)
@@ -105,22 +116,28 @@ class CouleurEtoiles(Step):
 
 class Couleurs(Step):
     id, phase, kind = "P8", "3 · Couleurs et export", "creatif"
-    title = "Couleurs du calque sans étoiles"
-    help = ("Couleurs de la nébuleuse ou de la galaxie, sur l'image sans étoiles. Au choix : saturation simple (agit "
-            "surtout sur un noyau de galaxie), coloration de toute la galaxie, doré / lave, bleu froid, teintes prêtes "
-            "(rose-magenta, rouge Hα, émeraude), un dégradé de deux couleurs que tu choisis (zones faibles -> zones "
-            "lumineuses), les palettes HOO et cuivre-bleu tirées du filtre LP (Hα = rouge, OIII = vert+bleu), ou les "
-            "régions HII du LP (mode B, galaxie). Le réglage fin (température, teinte, saturation…) se fait ensuite, en "
-            "direct, à l'étape P8F. En option : aplanir un fond irrégulier (pas sur une nébuleuse qui remplit le champ ; "
-            "dessine une zone de contrôle sur une partie faible pour vérifier qu'elle n'est pas effacée) et contraste "
-            "local. Chaque aperçu inclut les étoiles ; la colonne « Réf. » montre l'image naturelle.")
+    title = "Compléments de couleur et fantaisies (calque sans étoiles)"
+    optional = True
+    produces = ("G_final",)
+    help = ("Après les couleurs par gaz (P8B), cette étape est un complément : tu peux la PASSER si le rendu te convient. "
+            "Elle sert à trois choses. 1) Rendu fidèle sans filtre LP (galaxie, amas) : saturation simple, ou coloration "
+            "de toute la galaxie. 2) Corrections : aplanir un fond irrégulier (pas sur une nébuleuse qui remplit le "
+            "champ ; dessine une zone de contrôle sur une partie faible pour vérifier qu'elle n'est pas effacée) et "
+            "contraste local. 3) Fantaisies : des couleurs qui suivent la LUMINOSITÉ et non le gaz (doré / lave, bleu "
+            "froid, teintes prêtes, dégradé de deux couleurs au choix des zones faibles aux zones lumineuses), ou les "
+            "régions HII du LP sur une galaxie (mode B). Le réglage fin (température, teinte, saturation…) se fait "
+            "ensuite, en direct, à l'étape P8F. Chaque aperçu inclut les étoiles ; la colonne « Réf. » montre l'image "
+            "naturelle.")
     params = [
         P("methode", "Couleur", "choice", "satu",
-          choices=[["aucune", "Aucune (naturelle)"], ["satu", "Saturation (satu)"], ["objet", "Galaxie « objet entier »"],
-                   ["dore", "Doré / lave"], ["froid", "Bleu froid"], ["rose", "Rose / magenta"], ["rouge", "Rouge Hα"],
-                   ["emeraude", "Émeraude / turquoise"], ["degrade", "Dégradé : deux couleurs au choix"],
-                   ["hoo", "Palette HOO (filtre LP)"], ["cuivre_bleu", "Palette cuivre-bleu (filtre LP)"],
-                   ["hii", "Régions HII du LP (mode B galaxie)"]]),
+          choices=[["aucune", "Aucune (garder les couleurs en l'état)"], ["satu", "Fidèle · saturation"],
+                   ["objet", "Fidèle · galaxie « objet entier »"], ["hii", "Fidèle · régions HII du LP (mode B galaxie)"],
+                   ["dore", "Fantaisie · doré / lave (suit la luminosité)"], ["froid", "Fantaisie · bleu froid"],
+                   ["rose", "Fantaisie · rose / magenta"], ["rouge", "Fantaisie · rouge Hα"],
+                   ["emeraude", "Fantaisie · émeraude / turquoise"],
+                   ["degrade", "Fantaisie · dégradé de deux couleurs au choix"],
+                   ["hoo", "Fantaisie · palette HOO sur l'image entière"],
+                   ["cuivre_bleu", "Fantaisie · palette cuivre-bleu sur l'image entière"]]),
         P("c1", "Couleur des zones faibles", "color", "#3a5fd0", show_if={"methode": ["degrade"]}),
         P("c2", "Couleur des zones lumineuses", "color", "#ffb070", show_if={"methode": ["degrade"]}),
         P("etendue", "Jusqu'aux franges faibles", "float", 1.0, 0, 1, 0.05, show_if={"methode": ["degrade", "rose", "rouge", "emeraude"]},
@@ -140,8 +157,7 @@ class Couleurs(Step):
         P("c_force", "Force du contraste", "float", 0.6, 0.1, 1.2, 0.05, show_if={"contraste": [True]}),
         P("rayons", "Rayons", "text", "6,20,60", show_if={"contraste": [True]}),
     ]
-    default_variants = [{"methode": "satu", "satu": 0.15}, {"methode": "satu", "satu": 0.3}, {"methode": "dore", "force": 0.3},
-                        {"methode": "dore", "force": 0.6}]
+    default_variants = [{"methode": "satu", "satu": 0.15}, {"methode": "satu", "satu": 0.3}, {"methode": "aucune"}]
     preview_key = "G_final"
     linear = False
     reference_step = "P7T"
@@ -155,15 +171,28 @@ class Couleurs(Step):
 
     def meta(self, p):
         m = super().meta(p)
-        if bicolore_valide(p):                 # couleurs déjà posées par le bicolore : ne pas les recolorer d'office
+        if bicolore_valide(p):                 # couleurs déjà posées par gaz : ne pas les recolorer d'office
             m["default_variants"] = [{"methode": "aucune"}, {"methode": "satu", "satu": 0.15},
                                      {"methode": "aucune", "contraste": True}]
+        elif p.type == "galaxie":
+            m["default_variants"] = [{"methode": "satu", "satu": 0.15}, {"methode": "satu", "satu": 0.3},
+                                     {"methode": "objet", "force": 0.5}]
         return m
+
+    def summary(self, p):
+        if bicolore_valide(p):
+            return ["Les couleurs par gaz (P8B) sont validées : cette étape est facultative. « Passer l'étape » garde ces "
+                    "couleurs telles quelles ; sinon, ajoute ici un contraste local, une touche de saturation ou une fantaisie."]
+        from .bicolore import a_du_lp
+        if a_du_lp(p)[0]:
+            return ["Ce projet a des poses au filtre LP : pour des couleurs fidèles, qui suivent le gaz (hydrogène rouge, "
+                    "oxygène bleu-vert), utilise plutôt l'étape précédente « Couleurs par gaz » (P8B)."]
+        return None
 
     def run(self, ctx, prm, tag):
         p = ctx.p
         cur = couleur_source(p)
-        info = ["Entrée : bicolore Hα / OIII validé (P8B)"] if bicolore_valide(p) else []
+        info = ["Entrée : couleurs par gaz Hα / OIII validées (P8B)"] if bicolore_valide(p) else []
         if prm["aplanir"]:
             o = ctx.out(tag, "plat")
             args = [cur, o, prm["part_ciel"], int(prm["sigma"]), 1]

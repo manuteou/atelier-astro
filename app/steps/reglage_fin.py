@@ -2,7 +2,7 @@
 en JavaScript (web/js/etapes/reglage_fin.js) pour l'aperçu instantané."""
 from .. import color_ops, fitsio
 from .base import P, Step
-from .couleurs import clipped_pct, fused_preview, sky_of, stars_final
+from .couleurs import calque_couleur, clipped_pct, fused_preview, sky_of, stars_final
 
 
 FINE = ("temperature", "teinte", "rotation", "saturation", "sat_rouge", "sat_bleu", "vibrance", "luminosite", "ombres",
@@ -46,14 +46,14 @@ class ReglageFin(Step):
     produces = ("G_fin",)
 
     def ready(self, p):
-        return (p.file("G_final") is not None, "valider d'abord les couleurs (P8)")
+        return (calque_couleur(p) is not None, "valider (ou passer) d'abord les couleurs (P8)")
 
     def compose_preview(self, ctx, outputs, tag=""):
         return fused_preview(ctx, ctx.p.abs(outputs["G_fin"]), tag)
 
     def run(self, ctx, prm, tag):
         p = ctx.p
-        d, h = fitsio.read(p.file("G_final"))
+        d, h = fitsio.read(calque_couleur(p))
         sky = sky_of(d)
         y = color_ops.tune(d, prm, sky)
         o = ctx.out(tag, "G_fin")
@@ -81,9 +81,9 @@ class ReglageFin(Step):
 
 def live_sources(p, width=1400):
     """Aperçus réduits (sens affiché) du calque couleur validé et des étoiles, pour le réglage en direct dans le navigateur."""
-    g = p.file("G_final")
+    g = calque_couleur(p)
     if not g:
-        raise ValueError("valider d'abord les couleurs (P8)")
+        raise ValueError("valider (ou passer) d'abord les couleurs (P8)")
     s = stars_final(p)
     d, h = fitsio.read(g)
     sky = sky_of(d)

@@ -266,14 +266,33 @@ if p8b["applies"]:
                          {"palette": "perso", "oiii_debruit": 0.9}])
     for v in vs:
         assert len(v["images"]) == 2 and any("Séparation" in l for l in v["info"]), v["info"][:3]
+    # réglages d'avant le « rendu » (palette ou couleurs sans registre) : restent des fantaisies, même image qu'avant
+    assert vs[0]["params"]["registre"] == "fantaisie" and any("Hα #ff3020" in l for l in vs[0]["info"]), vs[0]["info"]
+    assert all(v["registre"] == "fidele" for v in p8b["default_variants"]), p8b["default_variants"]
+    assert [v["oiii_gain"] for v in p8b["default_variants"]] == [1.2, 1.8, 2.6]
     assert any("débruitage cumulé fort" in l for l in vs[3]["info"]), vs[3]["info"]
     import numpy as np
     from astropy.io import fits as _f
     b = _f.getdata(str(tmp / "Astrophoto" / NAME / vs[0]["outputs"]["bicolore"])).astype(float)
     print("  bicolore : médianes R/V/B", [round(float(np.median(b[c])), 3) for c in range(3)])
+    # rendu fidèle (défaut) : hydrogène rouge, oxygène bleu-vert ; plus de gain = plus de bleu-vert
+    _, vf = run("P8B", [{"oiii_gain": 1.2}, {"oiii_gain": 2.6}])
+    assert all(any("rendu fidèle" in l for l in v["info"]) for v in vf), vf[0]["info"]
+    f1, f2 = (_f.getdata(str(tmp / "Astrophoto" / NAME / v["outputs"]["bicolore"])).astype(float) for v in vf)
+    obj = f1[0] > np.percentile(f1[0], 97)
+    assert f1[0][obj].mean() > 1.5 * f1[2][obj].mean(), "fidèle : l'hydrogène reste rouge"
+    assert f2[2].mean() > f1[2].mean() and abs(f2[0].mean() - f1[0].mean()) < 0.2 * (f2[2].mean() - f1[2].mean()) + 1e-4, \
+        "le gain de l'OIII ajoute du bleu-vert sans toucher au rouge"
     val("P8B", 0)
     meta8 = next(s for s in ok(c.get(f"/api/projects/{NAME}"))["steps"] if s["id"] == "P8")
-    assert meta8["default_variants"][0]["methode"] == "aucune", meta8["default_variants"]
+    assert meta8["default_variants"][0]["methode"] == "aucune" and meta8["optional"] and meta8["summary"], meta8["default_variants"]
+    # P8 passée : les couleurs par gaz vont directement au réglage fin et à la fusion
+    ok(c.post(f"/api/projects/{NAME}/steps/P8/skip"))
+    etat = ok(c.get(f"/api/projects/{NAME}"))
+    assert next(s for s in etat["steps"] if s["id"] == "P8F")["ready"] and next(s for s in etat["steps"] if s["id"] == "P9")["ready"]
+    assert ok(c.get(f"/api/projects/{NAME}/live"))["base"].endswith(".jpg")
+    run("P9")
+    print("  couleurs par gaz : rendu fidèle vérifié ; P8 passée, fusion directe")
     BICOLORE = True
 else:
     assert "séparables" in p8b["why"], p8b["why"]
@@ -287,7 +306,7 @@ if MODE == "B" and TTYPE == "galaxie":
     variants[-1] = {"methode": "hii", "force": 1.0}
 _, vs8 = run("P8", variants); val("P8", 1)
 if BICOLORE:
-    assert vs8[0]["info"][0].startswith("Entrée : bicolore"), vs8[0]["info"][:2]
+    assert vs8[0]["info"][0].startswith("Entrée : couleurs par gaz"), vs8[0]["info"][:2]
 run("P8", [{"methode": "rose", "force": 0.5}, {"methode": "cuivre_bleu", "force": 1.0}]); val("P8", 0)
 lv = ok(c.get(f"/api/projects/{NAME}/live"))
 assert lv["base"].endswith(".jpg") and 0 <= lv["sky"] < 0.5, lv

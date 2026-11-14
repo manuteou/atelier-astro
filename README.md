@@ -60,7 +60,7 @@ Les scripts Siril générés sont gardés dans `_scripts\` : on peut toujours vo
 | Stacking | S1 inventaire, choix des filtres (A / B / C) et des appareils · S2 conversion, `register -2pass`, tri du fond de ciel · S3 `seqapplyreg` + `stack` (mode B : deux stacks contrôlés par STACKCNT) · S3B combinaison des appareils (seulement avec plusieurs appareils ; en mode B, filtre par filtre) · S4 mesure FWHM / S/N, projection et qualité du ciel en mag/arcsec² (facultatif) |
 | 1 · Linéaire | P0 recadrage (rectangle dessiné sur le stack) · P1 GraXpert (trois lissages, image du fond retiré sous chaque variante) · P2 SPCC + correction S50 Pro · P3 BXT · P4 NXT linéaire |
 | 2 · Étirement et étoiles | P5 étirement (autostretch, mtf calé sur le fond, autoghs, Statistical Stretch) + neutralisation par canal · P6 StarX · P6H halos et reflets des étoiles brillantes sur le calque sans étoiles (cœur résiduel remplacé, lueur retirée, reflets entourés d'un cercle effacés ; facultatif) · P6N noirs du fond sur le calque sans étoiles (facultatif) · P6B piste secondaire (mode B) · P7 étoiles (sélection étoile par étoile avec diversité et étagement des tailles — pied resserré façon puissance, éclat du cœur gardé —, puissance, garder, supprimer ; amas protégé par un clic) · P7T image naturelle |
-| 3 · Couleurs et export | P7BIS couleur des étoiles · P8B bicolore Hα / OIII (facultatif, filtre LP : chaque gaz traité à part, puis réuni avec les couleurs choisies) · P8 couleurs (satu, objet entier, doré/lave, bleu froid, rose/magenta, rouge Hα, émeraude, dégradé de deux couleurs au choix, palettes HOO et cuivre-bleu tirées du LP, régions HII du LP) + aplanissement et contraste local · P8F réglage fin en direct (température, teinte, rotation, saturation, saturation des rouges et des bleus, vibrance, luminosité, ombres et hautes lumières de la nébuleuse, contraste local, noirs ; l'aperçu change à chaque mouvement de curseur, puis application en pleine résolution ; bouton « Proposer des réglages » : curseurs placés d'après des mesures du fond, de la dominante et de la saturation, avec l'explication) · P9 fusion en écran · P10 NXT final · P11 retouches locales (éditeur : outil point vert ou anneau d'étoile, zoom à la molette, clic sur le défaut, correction visible tout de suite) · P12 export (JPEG HD/partage, TIFF 16 bits, sRGB, rotation exacte) |
+| 3 · Couleurs et export | P7BIS couleur des étoiles · P8B couleurs par gaz Hα / OIII (filtre LP : rendu fidèle — hydrogène rouge, oxygène bleu-vert — ou fantaisie : deux couleurs au choix, palettes HOO et cuivre-bleu) · P8 compléments et fantaisies, facultative (fidèle : saturation, galaxie « objet entier », régions HII du LP ; fantaisies qui suivent la luminosité : doré/lave, bleu froid, teintes, dégradé de deux couleurs) + aplanissement et contraste local · P8F réglage fin en direct (température, teinte, rotation, saturation, saturation des rouges et des bleus, vibrance, luminosité, ombres et hautes lumières de la nébuleuse, contraste local, noirs ; l'aperçu change à chaque mouvement de curseur, puis application en pleine résolution ; bouton « Proposer des réglages » : curseurs placés d'après des mesures du fond, de la dominante et de la saturation, avec l'explication) · P9 fusion en écran · P10 NXT final · P11 retouches locales (éditeur : outil point vert ou anneau d'étoile, zoom à la molette, clic sur le défaut, correction visible tout de suite) · P12 export (JPEG HD/partage, TIFF 16 bits, sRGB, rotation exacte) |
 | Fiche | P13 fiche PDF (carte du ciel, histoire, anecdote, images, fiche technique depuis le projet). Pré-remplis d'après les données : lieu (SITELAT/SITELONG des poses -> ville et région via OpenStreetMap), constellation et coordonnées, visibilité calculée pour ton lieu, phrases sur les images. Bouton « Brouillon des textes (Ollama) » : nom usuel, taille, catalogues, découverte, nom, nature, anecdote, à vérifier |
 
 Sur chaque étape : tu règles une ou plusieurs variantes (A, B, C… jusqu'à 6), **Lancer**, puis tu compares
@@ -219,6 +219,18 @@ Testés le 1er novembre 2026 sur le PC de l'auteur (RTX 5070 12 Go) :
 - **Réglages appliqués à toutes les demandes** : contexte limité à 8 192 jetons (`ollama_num_ctx`) et réflexion
   coupée. Sans cela, bonsai-2:27b occupait 27 Go au lieu de 8,5 Go et répondait 7 fois plus lentement ; avec la
   réflexion, plus de 8 minutes pour une fiche.
+
+## Couleurs : fidèle par gaz, ou fantaisie
+
+Le parcours des couleurs tient en une règle : **la couleur suit le gaz**.
+- **P8B « Couleurs par gaz »** est l'étape principale dès qu'il y a du filtre LP. Rendu **fidèle** proposé d'office :
+  hydrogène rouge, oxygène bleu-vert, là où ils sont ; les trois variantes ne diffèrent que par le gain de l'OIII
+  (1,2 à peine révélé · 1,8 visible · 2,6 bien visible). Rendu **fantaisie** au choix : deux couleurs par gaz, ou
+  les palettes HOO et cuivre-bleu. Des réglages enregistrés avant ce choix (presets) restent des fantaisies, à l'identique.
+- **P8 « Compléments et fantaisies »** devient facultative : la passer envoie les couleurs par gaz directement au
+  réglage fin et à la fusion. Elle garde le rendu fidèle sans LP (saturation, galaxie), les corrections (aplanir,
+  contraste local) et les fantaisies qui suivent la luminosité (doré, dégradés…), étiquetées comme telles.
+- **P8F** : réglage fin en direct, dans tous les cas.
 
 ## Bicolore Hα / OIII (P8B, filtre LP)
 

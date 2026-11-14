@@ -382,7 +382,7 @@ class NXTLin(Step):
     id, phase, kind = "P4", "1 · Linéaire", "creatif"
     help = ("Débruitage sur l'image entière, étoiles comprises. 0.4 léger, 0.6 moyen, 0.8 net ; au-delà, risque "
             "d'aspect « plastique » : c'est le zoom qui décide. Ce n'est pas le seul débruitage : un débruitage final "
-            "(P10) est proposé avant l'export, et le bicolore (P8B) débruite l'OIII à part. Mieux vaut deux passes "
+            "(P10) est proposé avant l'export, et les couleurs par gaz (P8B) débruitent l'OIII à part. Mieux vaut deux passes "
             "modérées qu'une passe forte ici : ce qui est lissé maintenant ne revient pas. Outil : Réglages > Outils "
             "(NoiseXTerminator, GraXpert, Siril…).")
     params = [P("dn", "Force", "float", 0.6, 0, 1, 0.05)]

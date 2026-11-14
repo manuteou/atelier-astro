@@ -97,20 +97,29 @@ def _couleur(hexa):
 
 class Bicolore(Step):
     id, phase, kind, optional = "P8B", "3 · Couleurs et export", "creatif", True
-    title = "Bicolore Hα / OIII (filtre LP)"
-    help = ("Sépare le calque sans étoiles en deux gaz : l'Hα (le rouge du filtre LP) et l'OIII (le bleu-vert), montrés "
-            "en noir et blanc sous chaque variante. Chacun a son propre traitement : l'OIII, plus faible et plus bruité, "
-            "est débruité d'abord (avant son gain, pour ne pas grossir le bruit ; la force proposée tient compte du "
-            "débruitage déjà fait en P4), puis amplifié ; l'Hα supporte du contraste local. Ils sont ensuite réunis "
-            "avec deux couleurs que tu choisis, ou les palettes HOO (rouge / turquoise) et cuivre-bleu. Le résultat "
-            "part vers l'étape Couleurs (P8), qui propose alors « aucune » couleur : tu peux la passer ou y ajouter une "
-            "touche. Étape facultative, seulement avec le filtre bi-bande.")
+    title = "Couleurs par gaz : Hα et OIII (filtre LP)"
+    help = ("L'étape de couleur principale quand tu as des poses au filtre bi-bande : la couleur suit le GAZ. Le calque "
+            "sans étoiles est séparé en hydrogène (Hα, le rouge du filtre) et en oxygène (OIII, le bleu-vert), montrés "
+            "en noir et blanc sous chaque variante, puis les deux gaz sont réunis.\n"
+            "• Rendu FIDÈLE (proposé d'office) : l'hydrogène reste rouge, l'oxygène sort en bleu-vert, là où il est "
+            "vraiment. Le réglage principal est « OIII : gain » : de 1,2 (l'oxygène à peine révélé) à 2,6 (bien "
+            "visible) ; les trois variantes proposées ne diffèrent que par lui.\n"
+            "• FANTAISIE : deux couleurs que tu choisis (une par gaz), ou les palettes marquées HOO (rouge / "
+            "turquoise) et cuivre-bleu.\n"
+            "Dans les deux cas, chaque gaz a son traitement : l'OIII, plus faible et plus bruité, est débruité d'abord "
+            "(avant son gain, pour ne pas grossir le bruit ; la force proposée tient compte du débruitage de P4), "
+            "l'Hα supporte du contraste local. L'étape suivante (P8, compléments) devient facultative. Les couleurs "
+            "qui suivent la luminosité (dégradés, doré) sont des fantaisies rangées en P8.")
+    FIDELE = ((1.0, 0.16, 0.12), (0.10, 0.82, 0.92))      # Hα rouge, OIII bleu-vert : proches des teintes d'émission
     params = [
-        P("palette", "Couleurs", "choice", "perso",
+        P("registre", "Rendu", "choice", "fidele",
+          choices=[["fidele", "Fidèle : hydrogène rouge, oxygène bleu-vert"],
+                   ["fantaisie", "Fantaisie : couleurs au choix ou palettes"]]),
+        P("palette", "Couleurs", "choice", "perso", show_if={"registre": ["fantaisie"]},
           choices=[["perso", "Deux couleurs au choix"], ["hoo", "Palette HOO (rouge / turquoise)"],
                    ["cuivre_bleu", "Palette cuivre-bleu"]]),
-        P("c_ha", "Couleur de l'Hα", "color", "#ff5a2a", show_if={"palette": ["perso"]}),
-        P("c_oiii", "Couleur de l'OIII", "color", "#26c4e8", show_if={"palette": ["perso"]}),
+        P("c_ha", "Couleur de l'Hα", "color", "#ff5a2a", show_if={"registre": ["fantaisie"], "palette": ["perso"]}),
+        P("c_oiii", "Couleur de l'OIII", "color", "#26c4e8", show_if={"registre": ["fantaisie"], "palette": ["perso"]}),
         P("ha_lum", "Hα : luminosité", "float", 1.0, 0.6, 1.8, 0.05, help="éclaircit ou assombrit le signal Hα, sans toucher au fond"),
         P("ha_contraste", "Hα : contraste local (relief)", "float", 0.0, 0, 1, 0.05,
           help="relief des filaments et des bords des nuages sombres, dans l'Hα seulement"),
@@ -123,15 +132,24 @@ class Bicolore(Step):
         P("oiii_debruit", "OIII : débruitage (avant le gain)", "float", 0.4, 0, 1, 0.05,
           help="proposé d'après la force retenue en P4 : plus P4 était fort, plus celui-ci est léger, pour éviter un "
                "aspect lissé « plastique »"),
-        P("oiii_gain", "OIII : gain", "float", 1.6, 0.5, 4.0, 0.1,
-          help="fait ressortir l'OIII (souvent bien plus faible que l'Hα) ; son bruit monte d'autant"),
+        P("oiii_gain", "OIII : gain (à quel point l'oxygène ressort)", "float", 1.8, 0.5, 4.0, 0.1,
+          help="1,2 = à peine révélé · 1,8 = visible · 2,6 = bien visible ; l'OIII est souvent bien plus faible que "
+               "l'Hα, et son bruit monte avec le gain"),
         P("oiii_lum", "OIII : luminosité", "float", 1.0, 0.6, 1.8, 0.05),
         P("force", "Force", "float", 1.0, 0.1, 1.0, 0.05,
           help="1 = couleurs bicolores pures ; plus bas, mélange avec les couleurs d'origine (des couleurs opposées "
                "mélangées tirent vers le gris)"),
     ]
-    default_variants = [{"palette": "perso"}, {"palette": "perso", "oiii_gain": 2.4},
-                        {"palette": "cuivre_bleu"}, {"palette": "hoo"}]
+    default_variants = [{"registre": "fidele", "oiii_gain": 1.2}, {"registre": "fidele", "oiii_gain": 1.8},
+                        {"registre": "fidele", "oiii_gain": 2.6}]
+
+    def clean(self, params):
+        # réglages enregistrés avant l'ajout du « rendu » (presets, étapes à refaire) : ils choisissaient une palette
+        # ou des couleurs, c'est donc une fantaisie ; sans cela ils basculeraient en « fidèle » et changeraient d'image
+        params = dict(params or {})
+        if "registre" not in params and any(k in params for k in ("palette", "c_ha", "c_oiii")):
+            params["registre"] = "fantaisie"
+        return super().clean(params)
     preview_key = "bicolore"
     linear = False
     reference_step = "P7T"
@@ -201,7 +219,10 @@ class Bicolore(Step):
             w = np.clip(h_sig / max(sh, 1e-6), 0, 1)                 # relief dans le signal, pas dans le ciel
             h_sig = h_sig + 1.5 * prm["ha_contraste"] * det * w
         # recombinaison
-        if prm["palette"] == "perso":
+        if prm.get("registre") == "fidele":
+            ca, co = (np.array(v, np.float32) for v in self.FIDELE)
+            noms = "rendu fidèle (hydrogène rouge, oxygène bleu-vert)"
+        elif prm["palette"] == "perso":
             ca, co = _couleur(prm["c_ha"]), _couleur(prm["c_oiii"])
             noms = f"Hα {prm['c_ha']}, OIII {prm['c_oiii']}"
         else:
@@ -231,9 +252,10 @@ class Bicolore(Step):
 
     def notes(self, p, st):
         x = st.get("params", {})
-        pal = (f"couleurs Hα {x.get('c_ha')} / OIII {x.get('c_oiii')}" if x.get("palette") == "perso"
+        pal = ("rendu fidèle (Hα rouge, OIII bleu-vert)" if x.get("registre") == "fidele" else
+               f"couleurs Hα {x.get('c_ha')} / OIII {x.get('c_oiii')}" if x.get("palette") == "perso"
                else {"hoo": "palette HOO", "cuivre_bleu": "palette cuivre-bleu"}.get(x.get("palette"), x.get("palette")))
-        return (f"Bicolore Hα / OIII : {pal}, force {x.get('force')} ; Hα luminosité {x.get('ha_lum')}, contraste "
+        return (f"Couleurs par gaz Hα / OIII : {pal}, force {x.get('force')} ; Hα luminosité {x.get('ha_lum')}, contraste "
                 f"{x.get('ha_contraste')}, débruitage {x.get('ha_debruit')} ; OIII débruitage {x.get('oiii_debruit')}, "
                 f"gain {x.get('oiii_gain')}, luminosité {x.get('oiii_lum')}, Hα retiré de l'OIII {x.get('oiii_pur')}")
 

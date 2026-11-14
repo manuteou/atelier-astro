@@ -130,9 +130,10 @@ def p8f_suggest(name: str):
     """Réglages fins proposés d'après des mesures du calque couleur validé (P8)."""
     from .. import color_ops, fitsio
     p = proj(name)
-    g = p.file("G_final")
+    from ..steps.couleurs import calque_couleur
+    g = calque_couleur(p)
     if not g:
-        raise ValueError("valider d'abord les couleurs (P8)")
+        raise ValueError("valider (ou passer) d'abord les couleurs (P8)")
     d, _ = fitsio.read(g)
     prm, lines = color_ops.suggest(d, p.type)
     return {"reglages": prm, "lignes": lines}
