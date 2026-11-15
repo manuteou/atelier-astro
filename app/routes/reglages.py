@@ -59,3 +59,15 @@ def ollama_status():
     cfg = config.load()
     models = report.ollama_models(cfg.get("ollama_url", ""))
     return {"ok": models is not None, "models": models or [], "model": cfg.get("ollama_model") or (models[0] if models else "")}
+
+
+@router.get("/api/meteo")
+def meteo():
+    """Ciel des prochaines nuits (prévisions Open-Meteo pour la ville des Réglages)."""
+    from .. import meteo as m
+    try:
+        return m.ciel_a_venir()
+    except ValueError as e:
+        return {"erreur": str(e)}
+    except Exception as e:                       # hors ligne, service indisponible : la page d'accueil reste utilisable
+        return {"erreur": f"prévisions indisponibles ({type(e).__name__}) : vérifie la connexion Internet"}

@@ -305,3 +305,22 @@ button.danger:disabled { opacity: .45; }
 .chip.ollama { border-color: #3a2f73; color: #c9bcff; }
 .chip.ollama:disabled { opacity: .5; }
 .ex-usuel { color: #c9bcff; font-size: 13.5px; }
+
+/* Ciel des prochaines nuits */
+.ciel { text-align: left; margin: 26px 0 0; }
+#cielAccueil .ciel { width: min(1000px, calc(100vw - 360px)); position: relative; left: 50%; transform: translateX(-50%); }
+@media (max-width: 800px) { #cielAccueil .ciel { width: auto; position: static; transform: none; } }
+.ciel-tete { margin-bottom: 8px; }
+.ciel-prochain { padding: 10px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); margin-bottom: 12px; }
+.ciel-prochain.favorable { border-color: #2c7a58; background: #10261d; }
+.ciel-prochain.possible { border-color: #7a6226; background: #241d0e; }
+.ciel-nuits { display: grid; grid-template-columns: repeat(auto-fit, minmax(98px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.ciel-nuit { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 9px; text-align: center; }
+.ciel-nuit.tendance { opacity: .62; }
+.ciel-jour { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.ciel-barres { display: flex; align-items: flex-end; gap: 1px; height: 34px; background: #070a12; border-radius: 4px; padding: 2px; margin-bottom: 6px; }
+.ciel-barres i { flex: 1; background: #9aa6c4; border-radius: 1px; }
+.ciel-pct { font-size: 17px; font-weight: 600; }
+.ciel-pct span { font-size: 11.5px; font-weight: 400; }
+.ciel-avis { font-size: 12.5px; font-weight: 600; margin-top: 3px; }
+#dlg .ciel { margin-top: 0; }

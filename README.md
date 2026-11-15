@@ -285,6 +285,16 @@ en 32 bits flottants (l'original n'est jamais modifié) ; le piédestal du capte
 retiré, sinon il fausse la calibration des couleurs et le fond. La qualité du ciel n'est pas mesurée (il faut les
 poses brutes) ; la classe de Bortle du lieu est reprise si elle est connue.
 
+## Ciel des prochaines nuits
+
+Sur la page d'accueil et par le bouton « Ciel » : pour les 7 nuits à venir, la couverture nuageuse pendant la nuit
+noire (Soleil sous −18°, heure par heure), la plage dégagée la plus longue, la Lune (part éclairée, heures de
+présence), le vent et le risque de buée, et le **prochain soir favorable**. Note sur 100 dominée par la durée de ciel
+dégagé ; « favorable » à partir de 75. Prévisions Open-Meteo (gratuit, sans compte, gardées une heure) pour la ville
+saisie dans Réglages (« Ville pour les prévisions du ciel » ; « Buc, Yvelines » lève les homonymes), sinon pour le
+dernier lieu d'observation connu. Fiable à 2-3 jours, tendance au-delà (cartes estompées). La note ne juge ni la
+turbulence ni la transparence. Hors ligne, le panneau l'indique et le reste de l'appli fonctionne.
+
 ## Mes travaux (exploration)
 
 Le bouton « Mes travaux » (barre du haut, ou page d'accueil) ouvre une galerie des travaux terminés : une carte par

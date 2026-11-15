@@ -21,6 +21,8 @@ DEFAULTS = {
     # Site web de « Mes travaux » : dossier fabriqué (vide : <racine>\site_galerie), dépôt git où le publier
     # (GitHub Pages), titre affiché
     "site_dossier": "", "site_depot": "", "site_titre": "",
+    # Ville pour les prévisions du ciel (« Buc », « Buc, Yvelines ») ; vide : dernier lieu d'observation connu
+    "meteo_ville": "",
     # Exécutable Siril en ligne de commande (siril-cli.exe sous Windows)
     "siril_cli": "",
     # Noms des scripts Python installés dans Siril (appelés par pyscript)
