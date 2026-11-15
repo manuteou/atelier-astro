@@ -21,7 +21,7 @@ def nuage(t):
     if nuit == 15:
         return 95                                      # ce soir : couvert
     if nuit == 16:
-        return 10 if 22 <= t.hour or t.hour < 1 else 80    # demain : 3 h dégagées seulement
+        return 4 if 22 <= t.hour or t.hour < 1 else (3 if t.hour == 4 else 80)    # demain : créneaux de 3 h et de 1 h
     if nuit == 17:
         return 5                                       # mardi : dégagé toute la nuit
     if nuit == 19:
@@ -43,6 +43,13 @@ assert a["jour"] == "ce soir" and b["jour"] == "demain soir" and c["jour"] == "m
 assert 10 <= a["heures_nuit"] <= 12, "nuit astronomique de mi-novembre à Paris : 11 à 12 h"
 assert a["avis"] == "défavorable" and a["heures_degagees"] == 0 and a["nuages"] == 95
 assert b["heures_degagees"] == 3 and (b["debut"], b["fin"]) == ("22:00", "01:00") and b["avis"] != "favorable", b
+assert b["heures_observables"] == 4 and [(x["debut"], x["fin"], x["heures"]) for x in b["creneaux"]] == \
+    [("22:00", "01:00", 3), ("04:00", "05:00", 1)], b["creneaux"]
+assert "4 h observables : 22 h–01 h (3 h), 04 h–05 h (1 h)" in b["details"][0], b["details"]
+# seuil : 5 % par défaut (ciel dégagé à 95 %) ; à 6 % de nuages l'heure ne compte pas, sauf seuil relevé
+d6 = {**data, "hourly": {**data["hourly"], "cloud_cover": [6] * len(heures)}}
+assert all(n["heures_observables"] == 0 for n in meteo.nuits(d6, LAT, LON, maintenant))
+assert all(n["heures_observables"] == n["heures_nuit"] for n in meteo.nuits(d6, LAT, LON, maintenant, degage=10))
 assert c["avis"] == "favorable" and c["heures_degagees"] == c["heures_nuit"] and not c["tendance"], c
 assert d["avis"] == "favorable" and d["tendance"], "à plus de 3 jours : tendance"
 p = meteo.prochain_soir(list(ns.values()))

@@ -4,7 +4,7 @@ import { loadConfig, loadProjects } from "../projet.js";
 
 export async function dlgSettings() {
   const c = (await api("GET", "/api/config")).config;
-  const keys = [["astro_root", "Dossier des sessions et projets"], ["dossier_finaux", "Dossier des travaux terminés (vide : FINAUX TRAITES dans la racine s'il existe)"], ["meteo_ville", "Ville pour les prévisions du ciel (ex. « Buc » ou « Buc, Yvelines » ; vide : dernier lieu d'observation)"], ["siril_cli", "Chemin de siril-cli"], ["script_graxpert", "Script GraXpert"], ["script_bxt", "Script BlurXTerminator"],
+  const keys = [["astro_root", "Dossier des sessions et projets"], ["dossier_finaux", "Dossier des travaux terminés (vide : FINAUX TRAITES dans la racine s'il existe)"], ["meteo_ville", "Ville pour les prévisions du ciel (ex. « Buc » ou « Buc, Yvelines » ; vide : dernier lieu d'observation)"], ["meteo_nuages_max", "Couverture nuageuse maximale pour observer, en % (5 = ciel dégagé à 95 %)"], ["siril_cli", "Chemin de siril-cli"], ["script_graxpert", "Script GraXpert"], ["script_bxt", "Script BlurXTerminator"],
     ["script_nxt", "Script NoiseXTerminator"], ["script_starx", "Script StarXTerminator"], ["script_statstretch", "Script Statistical Stretch"]];
   const ins = {};
   const body = h("div", {});

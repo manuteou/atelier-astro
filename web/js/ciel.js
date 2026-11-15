@@ -10,7 +10,7 @@ const teinte = (nuages) => `hsl(${Math.round(130 * (1 - Math.max(0, Math.min(100
 function barres(heures) {
   // une barre par heure de nuit : pleine hauteur et rouge = ciel couvert ; basse et verte = dégagé
   return h("div", { class: "ciel-barres", title: "couverture nuageuse heure par heure pendant la nuit noire" },
-    heures.map(x => h("i", { style: `height:${Math.max(10, x.nuages)}%;background:${teinte(x.nuages)}`, title: `${x.h} h : ${x.nuages} % de nuages` })));
+    heures.map(x => h("i", { class: x.ok ? "ok" : "", style: `height:${Math.max(10, x.nuages)}%;background:${teinte(x.nuages)}`, title: `${x.h} h : ${x.nuages} % de nuages` })));
 }
 
 export async function cielPanel() {
@@ -32,10 +32,11 @@ export async function cielPanel() {
       h("div", { class: "ciel-jour" }, n.jour),
       barres(n.heures),
       h("div", { class: "ciel-pct", style: `color:${teinte(n.nuages)}` }, `${n.nuages} %`, h("span", { class: "muted small" }, " nuages")),
-      h("div", { class: "small" }, n.heures_degagees ? `${n.debut} → ${n.fin}` : "—"),
+      h("div", { class: "ciel-obs" }, n.heures_observables ? `${n.heures_observables} h` : "0 h", h("span", { class: "muted small" }, " observables")),
+      h("div", { class: "small ciel-creneaux" }, n.creneaux.length ? n.creneaux.map(c => h("div", {}, `${c.debut.slice(0, 2)} h–${c.fin.slice(0, 2)} h (${c.heures} h)`)) : "—"),
       h("div", { class: "small muted" }, n.lune_pct < 8 ? "sans Lune" : `Lune ${n.lune_pct} %`),
       h("div", { class: "ciel-avis", style: `color:${COUL[n.avis]}` }, n.avis + (n.tendance ? " ?" : ""))))));
-  box.append(h("div", { class: "muted small" }, "Nuages comptés pendant la nuit noire seulement (Soleil sous −18°). La note juge le ciel dégagé, sa durée, la Lune, le vent et la buée ; pas la turbulence ni la transparence. Fiable à 2-3 jours, tendance au-delà."));
+  box.append(h("div", { class: "muted small" }, `Nuages comptés pendant la nuit noire seulement (Soleil sous −18°). Une heure est observable quand la couverture nuageuse ne dépasse pas ${d.seuil} % (réglable) ; les heures observables qui se suivent forment un créneau. La note juge le ciel dégagé, sa durée, la Lune, le vent et la buée ; pas la turbulence ni la transparence. Fiable à 2-3 jours, tendance au-delà.`));
   return box;
 }
 

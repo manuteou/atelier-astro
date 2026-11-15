@@ -288,7 +288,7 @@ poses brutes) ; la classe de Bortle du lieu est reprise si elle est connue.
 ## Ciel des prochaines nuits
 
 Sur la page d'accueil et par le bouton « Ciel » : pour les 7 nuits à venir, la couverture nuageuse pendant la nuit
-noire (Soleil sous −18°, heure par heure), la plage dégagée la plus longue, la Lune (part éclairée, heures de
+noire (Soleil sous −18°, heure par heure), le temps d'observation possible et ses créneaux (heures à 5 % de nuages au plus, soit un ciel dégagé à 95 % ; seuil réglable dans Réglages), la Lune (part éclairée, heures de
 présence), le vent et le risque de buée, et le **prochain soir favorable**. Note sur 100 dominée par la durée de ciel
 dégagé ; « favorable » à partir de 75. Prévisions Open-Meteo (gratuit, sans compte, gardées une heure) pour la ville
 saisie dans Réglages (« Ville pour les prévisions du ciel » ; « Buc, Yvelines » lève les homonymes), sinon pour le

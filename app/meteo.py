@@ -21,7 +21,7 @@ GEOCODE = "https://geocoding-api.open-meteo.com/v1/search"
 PREVISION = "https://api.open-meteo.com/v1/forecast"
 CHAMPS = ("cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_gusts_10m,relative_humidity_2m,"
           "temperature_2m,dew_point_2m,precipitation_probability")
-DEGAGE = 25               # % de nuages au plus pour qu'une heure compte comme dégagée
+DEGAGE = 5                # % de nuages au plus pour qu'une heure soit observable (réglable : meteo_nuages_max)
 JOURS_FIABLES = 3         # au-delà : tendance
 _CACHE = {}
 
@@ -94,8 +94,10 @@ def lune_eclairee(jd):
 JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 
 
-def nuits(data, lat, lon, maintenant=None):
-    """Liste des nuits à venir, notées. data : réponse Open-Meteo (heures locales + utc_offset_seconds)."""
+def nuits(data, lat, lon, maintenant=None, degage=DEGAGE):
+    """Liste des nuits à venir, notées. data : réponse Open-Meteo (heures locales + utc_offset_seconds).
+    Une heure est observable si la couverture nuageuse ne dépasse pas `degage` % et que la pluie est peu probable ;
+    les heures observables consécutives forment un créneau."""
     off = timedelta(seconds=int(data.get("utc_offset_seconds") or 0))
     H = data["hourly"]
     maintenant = maintenant or datetime.now(timezone.utc)
@@ -120,17 +122,23 @@ def nuits(data, lat, lon, maintenant=None):
         hs = par_nuit[jour]
         if len(hs) < 2:
             continue
-        # plus longue plage d'heures consécutives dégagées et sans pluie probable
-        best, cur = [], []
+        # créneaux : heures observables consécutives ; le plus long sert à la note
+        creneaux, cur = [], []
         for h in hs:
-            if h["nuages"] <= DEGAGE and h["pluie"] < 30 and (not cur or h["heure"] - cur[-1]["heure"] == timedelta(hours=1)):
+            ok = h["nuages"] <= degage and h["pluie"] < 30
+            if ok and cur and h["heure"] - cur[-1]["heure"] == timedelta(hours=1):
                 cur.append(h)
             else:
-                cur = [h] if h["nuages"] <= DEGAGE and h["pluie"] < 30 else []
-            if len(cur) > len(best):
-                best = list(cur)
+                if cur:
+                    creneaux.append(cur)
+                cur = [h] if ok else []
+        if cur:
+            creneaux.append(cur)
+        best = max(creneaux, key=len) if creneaux else []
+        total = sum(len(c) for c in creneaux)
         ref = best or hs
         moy = sum(h["nuages"] for h in hs) / len(hs)
+        haut = sum(h["hauts"] for h in hs) / len(hs)
         lune_pct = sum(h["lune_pct"] for h in hs) / len(hs)
         lune_gene = sum(1 for h in ref if h["lune"] > 0) / len(ref) * lune_pct / 100       # 0 (absente) à 1 (pleine, toute la plage)
         rafales = max(h["rafales"] for h in ref)
@@ -140,14 +148,13 @@ def nuits(data, lat, lon, maintenant=None):
         if not best:
             note = min(note, 25)
         rang = (jour - aujourd_hui).days
+        fmt = lambda c: f"{c[0]['heure']:%H h}–{c[-1]['heure'] + timedelta(hours=1):%H h} ({len(c)} h)"
         details = []
-        if best:
-            fin = best[-1]["heure"] + timedelta(hours=1)
-            details.append(f"dégagé de {best[0]['heure']:%H h} à {fin:%H h} ({len(best)} h)")
+        if creneaux:
+            details.append(f"{total} h observables : " + ", ".join(fmt(c) for c in creneaux))
         else:
-            details.append("pas d'heure dégagée")
-        haut = sum(h["hauts"] for h in hs) / len(hs)
-        if moy <= DEGAGE and haut > 40:
+            details.append("aucune heure observable")
+        if creneaux and haut > 40:
             details.append("voile d'altitude possible")
         if lune_pct < 8:
             details.append("pas de Lune")
@@ -161,13 +168,16 @@ def nuits(data, lat, lon, maintenant=None):
             details.append("buée probable (pare-buée conseillé)")
         out.append({"date": jour.isoformat(), "jour": ("ce soir" if rang == 0 else "demain soir" if rang == 1 else
                                                          f"{JOURS[jour.weekday()]} {jour.day}"),
-                    "nuages": round(moy), "heures_nuit": len(hs), "heures_degagees": len(best),
+                    "nuages": round(moy), "heures_nuit": len(hs), "heures_degagees": len(best), "heures_observables": total,
+                    "creneaux": [{"debut": f"{c[0]['heure']:%H:%M}", "fin": f"{c[-1]['heure'] + timedelta(hours=1):%H:%M}",
+                                  "heures": len(c)} for c in creneaux],
                     "debut": f"{best[0]['heure']:%H:%M}" if best else None,
                     "fin": f"{best[-1]['heure'] + timedelta(hours=1):%H:%M}" if best else None,
                     "lune_pct": round(lune_pct), "rafales": round(rafales), "note": round(note),
                     "avis": "favorable" if note >= 75 else "possible" if note >= 50 else "défavorable",
                     "tendance": rang >= JOURS_FIABLES, "details": details,
-                    "heures": [{"h": f"{h['heure']:%H}", "nuages": round(h["nuages"])} for h in hs]})
+                    "heures": [{"h": f"{h['heure']:%H}", "nuages": round(h["nuages"]),
+                                "ok": h["nuages"] <= degage and h["pluie"] < 30} for h in hs]})
     return out
 
 
@@ -182,6 +192,10 @@ def prochain_soir(ns):
 
 def ciel_a_venir():
     nom, lat, lon, origine = lieu()
-    ns = nuits(previsions(lat, lon), lat, lon)
-    return {"lieu": nom, "origine": origine, "nuits": ns, "prochain": prochain_soir(ns),
+    try:
+        seuil = max(0.0, min(100.0, float(config.load().get("meteo_nuages_max", DEGAGE))))
+    except (TypeError, ValueError):
+        seuil = DEGAGE
+    ns = nuits(previsions(lat, lon), lat, lon, degage=seuil)
+    return {"lieu": nom, "origine": origine, "nuits": ns, "prochain": prochain_soir(ns), "seuil": seuil,
             "source": "Open-Meteo", "maj": f"{datetime.now():%H:%M}"}

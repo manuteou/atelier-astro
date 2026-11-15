@@ -23,6 +23,8 @@ DEFAULTS = {
     "site_dossier": "", "site_depot": "", "site_titre": "",
     # Ville pour les prévisions du ciel (« Buc », « Buc, Yvelines ») ; vide : dernier lieu d'observation connu
     "meteo_ville": "",
+    # Couverture nuageuse maximale (%) pour qu'une heure compte comme observable
+    "meteo_nuages_max": 5,
     # Exécutable Siril en ligne de commande (siril-cli.exe sous Windows)
     "siril_cli": "",
     # Noms des scripts Python installés dans Siril (appelés par pyscript)
