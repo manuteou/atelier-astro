@@ -2,12 +2,15 @@
 // Prévisions Open-Meteo pour la ville des Réglages (calcul côté serveur : /api/meteo).
 import { h, api, openDlg } from "./core.js";
 
-const COUL = { favorable: "#3ccf8e", possible: "#f2b84b", "défavorable": "#6b7389" };
+const COUL = { favorable: "#3ccf8e", possible: "#f2b84b", "défavorable": "#e2685f" };
+
+// vert (ciel dégagé) -> jaune -> rouge (couvert)
+const teinte = (nuages) => `hsl(${Math.round(130 * (1 - Math.max(0, Math.min(100, nuages)) / 100))} 70% 52%)`;
 
 function barres(heures) {
-  // une barre par heure de nuit : pleine hauteur = ciel couvert
+  // une barre par heure de nuit : pleine hauteur et rouge = ciel couvert ; basse et verte = dégagé
   return h("div", { class: "ciel-barres", title: "couverture nuageuse heure par heure pendant la nuit noire" },
-    heures.map(x => h("i", { style: `height:${Math.max(6, x.nuages)}%;opacity:${0.35 + 0.65 * x.nuages / 100}`, title: `${x.h} h : ${x.nuages} % de nuages` })));
+    heures.map(x => h("i", { style: `height:${Math.max(10, x.nuages)}%;background:${teinte(x.nuages)}`, title: `${x.h} h : ${x.nuages} % de nuages` })));
 }
 
 export async function cielPanel() {
@@ -28,7 +31,7 @@ export async function cielPanel() {
     h("div", { class: "ciel-nuit" + (n.tendance ? " tendance" : ""), title: n.details.join(" · ") + (n.tendance ? " — tendance, à confirmer" : "") },
       h("div", { class: "ciel-jour" }, n.jour),
       barres(n.heures),
-      h("div", { class: "ciel-pct" }, `${n.nuages} %`, h("span", { class: "muted small" }, " nuages")),
+      h("div", { class: "ciel-pct", style: `color:${teinte(n.nuages)}` }, `${n.nuages} %`, h("span", { class: "muted small" }, " nuages")),
       h("div", { class: "small" }, n.heures_degagees ? `${n.debut} → ${n.fin}` : "—"),
       h("div", { class: "small muted" }, n.lune_pct < 8 ? "sans Lune" : `Lune ${n.lune_pct} %`),
       h("div", { class: "ciel-avis", style: `color:${COUL[n.avis]}` }, n.avis + (n.tendance ? " ?" : ""))))));
