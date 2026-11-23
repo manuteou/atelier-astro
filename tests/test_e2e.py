@@ -446,6 +446,13 @@ if not GENERIC:
     tf = tech_facts(Project.load(tmp / "Astrophoto" / NAME))
     assert "Bortle 7" in tf["ciel"] or STACK, tf          # projet parti d'un stack : pas de S1, Bortle du lieu s'il est connu
     print("  fiche technique, ciel :", tf["ciel"])
+# historique des choix : noté à chaque validation d'une étape où l'avis sert, sans la réponse dans le rapport
+from app import historique  # noqa: E402
+hist = historique.charger()
+assert hist and all(r["projet"] == NAME for r in hist), [r.get("projet") for r in hist]
+assert {"P4", "P5"} <= {r["etape"] for r in hist}, sorted({r["etape"] for r in hist})
+assert "S4" not in {r["etape"] for r in hist} and not any("Variante actuellement validée" in r["rapport"] for r in hist)
+print("historique des choix :", historique.resume()["par_etape"])
 # finalisation : dossier « nom - lieu - date », PDF et images gardés, dossier de travail supprimé, poses intactes
 if os.environ.get("ATELIER_SANS_FINAL"):
     print("Dossier de test :", tmp); raise SystemExit(0)

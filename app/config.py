@@ -48,6 +48,9 @@ DEFAULTS = {
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "",
     "ollama_num_ctx": 8192,
+    # Historique des choix (atelier_choix.jsonl dans la racine) et nombre de choix passés comparables montrés au
+    # modèle avec chaque demande (0 = aucun)
+    "historique_choix": True, "ollama_exemples": 3,
     "ollama_intent_model": "",         # modèle pour « dis ce que tu veux » (vide = le modèle par défaut)           # contexte réservé par Ollama : petit = rapide et tient dans la carte graphique
     "port": 8765,
     # lieux d'observation : [{lat, lon, bortle}] (classe de Bortle retenue par lieu, voir sites.py)

@@ -69,7 +69,7 @@ f.write_text(json.dumps(data))
 os.environ["ATELIER_METEO"] = str(f)
 from app import config  # noqa: E402
 config.load = lambda: {**config.DEFAULTS, "meteo_ville": "", "sites": [{"lat": LAT, "lon": LON, "bortle": 7}]}
-r = meteo.ciel_a_venir()
+r = meteo.ciel_a_venir(maintenant)            # date fixe : la prévision enregistrée ne « périme » pas
 assert r["origine"] == "dernier lieu d'observation connu" and len(r["nuits"]) >= 1, r["origine"]
 config.load = lambda: {**config.DEFAULTS, "meteo_ville": "", "sites": []}
 try:

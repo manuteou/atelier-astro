@@ -152,7 +152,7 @@ def clean(step, vals, changes):
     return ok, refus
 
 
-def prompt(step, vals, objectif, rapport=""):
+def prompt(step, vals, objectif, rapport="", exemples=""):
     sch = schema(step, vals)
     names = {d["nom"] for d in sch}
     ex = "\n".join(f"- « {t} » -> {json.dumps({k: v for k, v in r.items() if k in names}, ensure_ascii=False)}"
@@ -162,6 +162,7 @@ def prompt(step, vals, objectif, rapport=""):
             + (f"\n\nExemples d'objectifs et de réglages pour cette étape :\n{ex}" if ex else "")
             + (f"\n\nMesures de la dernière série de variantes (rapport de l'appli) :\n{rapport}" if rapport else
                "\n\nAucune variante lancée : pas encore de mesures, appuie-toi sur les réglages actuels.")
+            + (f"\n\n{exemples}" if exemples else "")
             + f"\n\nObjectif choisi par l'utilisateur : « {objectif} ». Donne les meilleurs réglages pour l'atteindre "
               "d'après les mesures (si une variante y répond déjà, reprends ses réglages).")
 
@@ -175,10 +176,10 @@ def choose_model(cfg, installed):
     return g or cfg.get("ollama_model") or ((installed or [""])[0])
 
 
-def traduire(url, model, step, vals, objectif, rapport="", timeout=180):
+def traduire(url, model, step, vals, objectif, rapport="", timeout=180, exemples=""):
     from .report import ollama_chat
     txt = ollama_chat(url, model, [{"role": "system", "content": SYSTEM},
-                                   {"role": "user", "content": prompt(step, vals, objectif, rapport)}],
+                                   {"role": "user", "content": prompt(step, vals, objectif, rapport, exemples)}],
                       fmt="json", timeout=timeout)
     m = re.search(r"\{.*\}", txt, re.S)
     d = json.loads(m.group(0)) if m else {}

@@ -50,7 +50,8 @@ export function intentBar(step) {
         try {
           const r = await api("POST", `/api/projects/${S.project}/steps/${step.id}/intention`, { objectif: o.cle, vals: initEditor(step)[0] });
           const l = applyChanges(step, r.reglages);
-          show(`« ${r.objectif} » (${r.modele})`, l, (r.explication || "") + (r.refuses?.length ? ` — ignoré : ${r.refuses.join(", ")}` : ""));
+          show(`« ${r.objectif} » (${r.modele})`, l, (r.explication || "") + (r.refuses?.length ? ` — ignoré : ${r.refuses.join(", ")}` : "")
+            + (r.exemples ? ` — d'après les mesures et ${r.exemples} de tes choix passés sur des images comparables` : ""));
         } catch (e) { toast(e.message, true); b.disabled = false; b.textContent = t0; }
       } }, o.texte);
     return b;

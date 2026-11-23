@@ -190,12 +190,12 @@ def prochain_soir(ns):
     return {**max(possibles, key=lambda n: n["note"]), "choix": "possible"} if possibles else None
 
 
-def ciel_a_venir():
+def ciel_a_venir(maintenant=None):
     nom, lat, lon, origine = lieu()
     try:
         seuil = max(0.0, min(100.0, float(config.load().get("meteo_nuages_max", DEGAGE))))
     except (TypeError, ValueError):
         seuil = DEGAGE
-    ns = nuits(previsions(lat, lon), lat, lon, degage=seuil)
+    ns = nuits(previsions(lat, lon), lat, lon, maintenant, degage=seuil)
     return {"lieu": nom, "origine": origine, "nuits": ns, "prochain": prochain_soir(ns), "seuil": seuil,
             "source": "Open-Meteo", "maj": f"{datetime.now():%H:%M}"}

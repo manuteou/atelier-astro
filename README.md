@@ -202,6 +202,20 @@ DBXtract (absent de l'appli), étoile marquante (absente).
   dans un champ ne peut donc pas le détourner. Ses réponses sont contrôlées (réglages connus, affichés, dans leurs
   bornes) ; rien n'est lancé, la page dit ce qui a changé.
 
+## Historique des choix : Ollama suit ton goût
+
+- À chaque validation d'une étape où l'avis sert, l'appli note dans `atelier_choix.jsonl` (dossier des sessions) le
+  contexte de l'image (type, appareil, mode, Bortle, heures de pose), les variantes proposées avec leurs mesures,
+  celle que tu as gardée, et ce qu'Ollama avait proposé s'il a été consulté. Pas pour une étape refaite avec ses
+  réglages ni pour une étape faite automatiquement. Rien ne quitte la machine.
+- Avec chaque demande d'avis ou de réglages, le modèle voit tes 3 choix passés à la même étape sur les images les plus
+  comparables (autres projets seulement ; une étape revalidée remplace l'ancien choix). Sans entraînement, ses
+  propositions suivent ta façon de faire. Réglages : « Historique de tes choix » (activer, nombre d'exemples,
+  reprendre les choix des projets existants, exporter).
+- Plus tard : « Exporter un jeu d'entraînement » écrit `atelier_entrainement.jsonl` (format conversationnel : rapport
+  de l'étape → variante et réglages gardés) pour un fine-tuning (LoRA) d'un petit modèle. Cela n'a de sens qu'à partir
+  de quelques centaines de choix, et seulement s'il fait mieux que les exemples sur des projets mis de côté.
+
 ## Modèles locaux (Ollama) : ce qu'ils valent
 
 Testés le 1er novembre 2026 sur le PC de l'auteur (RTX 5070 12 Go) :

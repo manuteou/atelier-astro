@@ -84,13 +84,18 @@ def run_variants(job, p: Project, sid, variants):
     return {"step": sid, "n": len(results)}
 
 
-def validate(p: Project, sid, idx):
+def validate(p: Project, sid, idx, trace=True):
+    """trace : noter le choix dans l'historique (pas pour une étape refaite ou validée automatiquement)."""
     step = STEP_MAP[sid]
     names = {k: v.format(T=p.T) for k, v in step.canonical.items()}
     var = p.step(sid)["variants"][idx]
     p.validate(sid, idx, names, ORDER)
     if hasattr(step, "on_validate"):
         step.on_validate(p, var)
+    if trace:
+        from . import historique
+        historique.noter(p, sid)
+    p.step(sid).pop("ollama_propositions", None)
     p.save()
     write_notes(p)
 
@@ -124,7 +129,7 @@ def replay(job, name_loader, until=None):
         var = p.step(sid)["variants"][0]
         if var.get("error"):
             raise RuntimeError(f"{sid} a échoué en la refaisant : {var['error']}")
-        validate(p, sid, 0)
+        validate(p, sid, 0, trace=False)
         alerts = [l for l in var.get("info", []) if l.startswith("ATTENTION")]
         done.append({"step": sid, "alertes": len(alerts)})
         job.write(f"{sid} revalidée" + (f" — {len(alerts)} alerte(s)" if alerts else " — aucune alerte"))

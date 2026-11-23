@@ -43,7 +43,7 @@ def retouch(name: str):
 @router.post("/api/projects/{name}/steps/{sid}/validate")
 def validate(name: str, sid: str, data: dict = Body(...)):
     p = proj(name)
-    pipeline.validate(p, sid, int(data.get("variant", 0)))
+    pipeline.validate(p, sid, int(data.get("variant", 0)), trace=not data.get("auto"))
     return {"ok": True}
 
 
@@ -91,7 +91,12 @@ def step_advice(name: str, sid: str, data: dict = Body(default={})):
     from ..intentions import AVIS_UTILE
     if sid not in AVIS_UTILE:
         raise ValueError("l'avis du modèle local n'est pas proposé pour cette étape")
-    text = report.build(proj(name), sid, pour_modele=True)
+    from .. import historique
+    p0 = proj(name)
+    text = report.build(p0, sid, pour_modele=True)
+    ex = historique.bloc_exemples(p0, sid, cfg)
+    if ex:
+        text += "\n\n" + ex
 
     def work(job):
         job.write(f"Avis demandé à {model} (Ollama) sur {sid} : {len(text)} caractères de rapport")
@@ -190,10 +195,43 @@ def intention(name: str, sid: str, data: dict = Body(...)):
             excl = ",".join(str(n) for n in parts[0][1])
         else:
             excl = " ; ".join(f"{d}: " + ",".join(str(n) for n in lst) for d, lst in parts)
+        _proposition(p, sid, objectif, {"exclure": excl}, model)
         return {"reglages": {"exclure": excl}, "explication": " ".join(expl), "refuses": refus, "modele": model,
                 "objectif": objectif}
     vals = {**step.defaults(), **{k: v for k, v in (data.get("vals") or {}).items() if k in step.defaults()}}
     rapport = report.build(p, sid, pour_modele=True) if (p.state["steps"].get(sid) or {}).get("variants") else ""
-    out = intentions.traduire(cfg["ollama_url"], model, step, vals, objectif, rapport)
+    from .. import historique
+    exemples = historique.bloc_exemples(p, sid, cfg)
+    out = intentions.traduire(cfg["ollama_url"], model, step, vals, objectif, rapport, exemples=exemples)
     out["modele"], out["objectif"] = model, objectif
+    out["exemples"] = sum(1 for l in exemples.splitlines() if l.startswith("- "))
+    _proposition(proj(name), sid, objectif, out["reglages"], model)
     return out
+
+
+def _proposition(p, sid, objectif, reglages, model):
+    """Garde ce qu'Ollama a proposé : l'historique notera à la validation si le conseil a été suivi."""
+    lst = p.step(sid).setdefault("ollama_propositions", [])
+    lst.append({"objectif": objectif, "reglages": reglages, "modele": model, "date": time.strftime("%Y-%m-%d %H:%M")})
+    del lst[:-5]
+    p.save()
+
+
+@router.get("/api/historique")
+def historique_resume():
+    from .. import historique
+    return historique.resume()
+
+
+@router.post("/api/historique/importer")
+def historique_importer():
+    from .. import historique
+    return {"ajoutes": historique.importer(), **historique.resume()}
+
+
+@router.post("/api/historique/exporter")
+def historique_exporter():
+    """Jeu de données d'entraînement (pour plus tard), écrit à côté de l'historique."""
+    from .. import historique
+    dest = historique.chemin().with_name("atelier_entrainement.jsonl")
+    return {"exemples": historique.exporter(dest), "fichier": str(dest)}

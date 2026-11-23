@@ -41,7 +41,7 @@ async function avancer(step) {
       S.sid = next.id; renderSteps(); renderMain();
       return;
     }
-    await api("POST", `/api/projects/${S.project}/steps/${next.id}/validate`, { variant: 0 });
+    await api("POST", `/api/projects/${S.project}/steps/${next.id}/validate`, { variant: 0, auto: true });
     toast(`${next.id} · ${next.title} : fait et validé automatiquement`);
     await avancer(next);
   } catch (e) { toast(e.message, true); }

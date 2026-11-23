@@ -36,6 +36,28 @@ export async function dlgSettings() {
   body.append(h("h3", {}, "Avis local (Ollama, facultatif)"),
     h("div", { class: "field" }, h("label", {}, "Adresse d'Ollama"), ins.ollama_url),
     h("div", { class: "field" }, h("label", {}, "Modèle" + (ol.ok ? ` (${ol.models.length} installé(s))` : " — Ollama non joignable")), ins.ollama_model));
+  // historique des choix : exemples montrés au modèle, et futur jeu d'entraînement
+  ins.historique_choix = h("input", { type: "checkbox", checked: c.historique_choix !== false });
+  ins.ollama_exemples = h("input", { type: "number", min: 0, max: 6, step: 1, value: c.ollama_exemples ?? 3 });
+  const hist = h("div", { class: "hint" }, "…");
+  const majHist = (r) => {
+    const etapes = Object.entries(r.par_etape || {}).map(([k, n]) => `${k} ${n}`).join(", ");
+    hist.textContent = `${r.choix_distincts} choix enregistrés sur ${r.projets} projet(s)` + (etapes ? ` (${etapes})` : "")
+      + (r.pret_entrainement ? " — assez pour envisager un entraînement." : ` — un entraînement demanderait environ 300 choix.`);
+  };
+  api("GET", "/api/historique").then(majHist).catch(() => { hist.textContent = "historique illisible"; });
+  body.append(h("h3", {}, "Historique de tes choix"),
+    h("p", { class: "hint" }, "À chaque validation d'une étape où l'avis du modèle sert, l'appli note les variantes proposées, leurs mesures et celle que tu as gardée (fichier atelier_choix.jsonl dans le dossier des sessions ; rien ne quitte ta machine). Quand tu demandes un avis ou des réglages à Ollama, il voit tes choix passés sur les images les plus comparables : ses propositions suivent ton goût."),
+    h("div", { class: "field check" }, h("label", {}, ins.historique_choix, "Noter mes choix et les montrer au modèle")),
+    h("div", { class: "field" }, h("label", {}, "Choix passés montrés au modèle à chaque demande (0 = aucun)"), ins.ollama_exemples),
+    hist,
+    h("div", { class: "actions" },
+      h("button", { class: "ghost", onclick: async () => {
+        try { const r = await api("POST", "/api/historique/importer"); majHist(r); toast(`${r.ajoutes} choix repris des projets existants`); }
+        catch (e) { toast(e.message, true); } } }, "Reprendre les choix des projets existants"),
+      h("button", { class: "ghost", onclick: async () => {
+        try { const r = await api("POST", "/api/historique/exporter"); toast(`${r.exemples} exemples écrits dans ${r.fichier}`); }
+        catch (e) { toast(e.message, true); } } }, "Exporter un jeu d'entraînement")));
   body.append(h("div", { class: "actions" }, h("button", {
     onclick: async () => {
       const data = {};
@@ -45,6 +67,8 @@ export async function dlgSettings() {
       data.spcc_catalog_local = ins.spcc_catalog_local.checked;
       data.ollama_url = ins.ollama_url.value.trim();
       data.ollama_model = ins.ollama_model.value;
+      data.historique_choix = ins.historique_choix.checked;
+      data.ollama_exemples = Math.max(0, Math.min(6, parseInt(ins.ollama_exemples.value) || 0));
       data.outils = Object.fromEntries(Object.keys(toolSel).map(k => [k, toolSel[k].value]));
       data.outils_perso = Object.fromEntries(Object.keys(toolPerso).map(k => [k, toolPerso[k].value]));
       await api("POST", "/api/config", data);
