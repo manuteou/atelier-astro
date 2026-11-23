@@ -71,6 +71,11 @@ from app import config  # noqa: E402
 config.load = lambda: {**config.DEFAULTS, "meteo_ville": "", "sites": [{"lat": LAT, "lon": LON, "bortle": 7}]}
 r = meteo.ciel_a_venir(maintenant)            # date fixe : la prévision enregistrée ne « périme » pas
 assert r["origine"] == "dernier lieu d'observation connu" and len(r["nuits"]) >= 1, r["origine"]
+assert len(r["nuits"]) <= meteo.NUITS and r["maj"].startswith("prévision du "), r["maj"]
+# fenêtre glissante : deux jours plus tard, elle commence deux nuits plus loin, toujours par « ce soir »
+r2 = meteo.ciel_a_venir(maintenant + timedelta(days=2))
+assert r2["nuits"][0]["date"] == "2026-11-17" and r2["nuits"][0]["jour"] == "ce soir", r2["nuits"][0]
+assert r2["nuits"][1]["jour"] == "demain soir"
 config.load = lambda: {**config.DEFAULTS, "meteo_ville": "", "sites": []}
 try:
     meteo.ciel_a_venir()

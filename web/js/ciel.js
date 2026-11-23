@@ -40,6 +40,22 @@ export async function cielPanel() {
   return box;
 }
 
+// Accueil : la prévision suit le jour courant (fenêtre glissante), même si la page reste ouverte des jours :
+// redemandée toutes les 30 min, au retour sur l'onglet si elle a plus de 30 min, et au changement de jour.
+export function cielAccueil(el) {
+  let t = 0, jour = "";
+  const maj = async () => {
+    t = Date.now(); jour = new Date().toDateString();
+    const box = await cielPanel();
+    el.replaceChildren(box);
+  };
+  maj();
+  setInterval(() => { if (Date.now() - t > 30 * 60e3 || new Date().toDateString() !== jour) maj(); }, 60e3);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && (Date.now() - t > 30 * 60e3 || new Date().toDateString() !== jour)) maj();
+  });
+}
+
 export async function dlgCiel() {
   openDlg("Ciel des prochaines nuits", await cielPanel());
 }

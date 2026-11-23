@@ -6,7 +6,7 @@ import { dlgNewProject } from "./fenetres/nouveau_projet.js";
 import { dlgPresets } from "./fenetres/presets.js";
 import { dlgSettings } from "./fenetres/reglages.js";
 import { openExplorer } from "./explorer.js";
-import { cielPanel, dlgCiel } from "./ciel.js";
+import { cielAccueil, dlgCiel } from "./ciel.js";
 import { renderMain } from "./page.js";
 import { cancelJob, watchJob } from "./travaux.js";
 import { closeViewer } from "./visionneuse.js";
@@ -18,7 +18,7 @@ export async function init() {
   $("#btnExplorer").onclick = () => openExplorer();
   if ($("#btnExplorer2")) $("#btnExplorer2").onclick = () => openExplorer();
   $("#btnCiel").onclick = dlgCiel;
-  if ($("#cielAccueil")) cielPanel().then(el => $("#cielAccueil")?.append(el));
+  if ($("#cielAccueil")) cielAccueil($("#cielAccueil"));
   $("#btnMateriel").onclick = () => dlgMateriel();
   $("#btnPresets").onclick = dlgPresets;
   $("#btnNotes").onclick = dlgNotes;

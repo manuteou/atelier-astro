@@ -23,6 +23,8 @@ CHAMPS = ("cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_gus
           "temperature_2m,dew_point_2m,precipitation_probability")
 DEGAGE = 5                # % de nuages au plus pour qu'une heure soit observable (réglable : meteo_nuages_max)
 JOURS_FIABLES = 3         # au-delà : tendance
+NUITS = 7                 # fenêtre glissante : la nuit en cours (ou ce soir) et les 6 suivantes
+RAFRAICHIR = 1800         # s : prévision redemandée au plus toutes les 30 min (Open-Meteo se met à jour chaque heure)
 _CACHE = {}
 
 
@@ -77,9 +79,15 @@ def previsions(lat, lon):
     if f:
         return json.loads(Path(f).read_text(encoding="utf-8"))
     k = ("prev", round(lat, 2), round(lon, 2))
-    if k not in _CACHE or time.time() - _CACHE[k][0] > 3600:
-        _CACHE[k] = (time.time(), _get(PREVISION, {"latitude": round(lat, 4), "longitude": round(lon, 4), "hourly": CHAMPS,
-                                                   "forecast_days": 8, "timezone": "auto"}))
+    if k not in _CACHE or time.time() - _CACHE[k][0] > RAFRAICHIR:
+        try:
+            _CACHE[k] = (time.time(), _get(PREVISION, {"latitude": round(lat, 4), "longitude": round(lon, 4),
+                                                       "hourly": CHAMPS, "forecast_days": 8, "timezone": "auto"}))
+        except Exception:
+            if k not in _CACHE or time.time() - _CACHE[k][0] > 12 * 3600:
+                raise
+            # service momentanément indisponible : on garde la dernière prévision reçue (sa date est affichée) ;
+            # les heures passées en sont retirées à chaque affichage, la fenêtre reste glissante
     return _CACHE[k][1]
 
 
@@ -196,6 +204,8 @@ def ciel_a_venir(maintenant=None):
         seuil = max(0.0, min(100.0, float(config.load().get("meteo_nuages_max", DEGAGE))))
     except (TypeError, ValueError):
         seuil = DEGAGE
-    ns = nuits(previsions(lat, lon), lat, lon, maintenant, degage=seuil)
+    ns = nuits(previsions(lat, lon), lat, lon, maintenant, degage=seuil)[:NUITS]
+    k = ("prev", round(lat, 2), round(lon, 2))
+    recue = datetime.fromtimestamp(_CACHE[k][0]) if k in _CACHE else datetime.now()
     return {"lieu": nom, "origine": origine, "nuits": ns, "prochain": prochain_soir(ns), "seuil": seuil,
-            "source": "Open-Meteo", "maj": f"{datetime.now():%H:%M}"}
+            "source": "Open-Meteo", "maj": f"prévision du {recue:%d/%m à %H:%M}"}
